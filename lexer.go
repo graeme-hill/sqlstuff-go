@@ -1,9 +1,15 @@
 package main
 
+import (
+	"fmt"
+	"unicode"
+)
+
 type lexerState int
+
 const (
-	lexerStateBegin lexerState = iota
-	lexerStateAfterSelect
+	lexerStateNormal lexerState = iota
+	lexerStateQuotedIdentifier
 )
 
 func lex(sql string, emit func(token)) error {
@@ -12,26 +18,26 @@ func lex(sql string, emit func(token)) error {
 }
 
 type lexer struct {
-	sql string
-	length int
+	sql              string
+	length           int
 	currentCharIndex int
-	currentLine int
-	state lexerState
-	emit func(Token)
+	currentLine      int
+	state            lexerState
+	emit             func(Token)
 }
 
 func newLexer(sql string, emit func(token)) {
 	return lexer{
-		sql: sql,
-		length: len(sql),
+		sql:              sql,
+		length:           len(sql),
 		currentCharIndex: 0,
-		currentLine: 1,
-		emit: emit,
-		state: lexerStateBegin,
+		currentLine:      1,
+		emit:             emit,
+		state:            lexerStateBegin,
 	}
 }
 
-func (l *lexer) peek(offset int) rune, bool {
+func (l *lexer) peek(offset int) (rune, bool) {
 	i := l.currentCharIndex + offset
 	if i >= l.length {
 		return nil, false
@@ -39,13 +45,13 @@ func (l *lexer) peek(offset int) rune, bool {
 	return l.sql[i], true
 }
 
-func (l *lexer) advance() rune, bool {
+func (l *lexer) advance() (rune, bool) {
 	char, ok := l.peek(0)
-	l.currentCharIndex += 1
+	l.currentCharIndex++
 	return char, ok
 }
 
-func (l *lexer) advanceUpper() rune, bool {
+func (l *lexer) advanceUpper() (rune, bool) {
 	char, ok := l.advance()
 	if !ok {
 		return char, false
@@ -76,17 +82,68 @@ func (l *lexer) next() error {
 
 func (l *lexer) fields() error {
 	for {
+		// get next expression in select list
 		err := l.expression()
 		if err != nil {
 			return err
 		}
 		l.skipWhitespace()
-		ch, ok := l.
+
+		// emit alias tokens if there is an alias
+		if l.check("AS", true) {
+			l.emit(token{tokType: tokenTypeKeywordAs})
+			err = l.columnName()
+			if err != nil {
+				return err
+			}
+			l.skipWhitespace()
+		}
+
+		// keep looping iff there is a comma
+		next, ok := l.peek(1)
+		if !ok || next != ',' {
+			break
+		}
+		l.currentCharIndex++
+	}
+
+	return nil
+}
+
+// Examples: name or user.name
+func (l *lexer) columnName() error {
+	// Get the required first part
+	first, err := l.symbol()
+	if err != nil {
+		return err
 	}
 }
 
-func (l *lexer) check(expected string, caseSensitive bool) bool {
-	
+func (l *lexer) symbol() string, error {
+	start := l.currentCharIndex
+	for {
+		ch, ok := 
+	}
+}
+
+func (l *lexer) check(expected string, capitalized bool) bool {
+	for i := 0; i < len(expected); i++ {
+		expectedChar := expected[i]
+		actualChar, ok := l.peek(i)
+		if !ok {
+			return false
+		}
+		if capitalized {
+			actualChar = unicode.ToUpper(actualChar)
+		}
+		if expectedChar != actualChar {
+			return false
+		}
+	}
+
+	// it matched so advance and return true
+	l.currentCharIndex += len(expected)
+	return true
 }
 
 func (l *lexer) expression() error {
@@ -96,13 +153,24 @@ func (l *lexer) expression() error {
 func (l *lexer) skipWhitespace() {
 	for {
 		ch, ok := l.advance()
-		if !ok || !unicode.IsSpace(ch) {
+		if !ok {
+			// there are no more chars so stop advancing
+			return
+		}
+
+		if ch == '\n' {
+			// started a new line so increment line index
+			l.currentLine++
+		}
+
+		if !unicode.IsSpace(ch) {
+			// not whitespace so stop advancing
 			return
 		}
 	}
 }
 
-func (l *lexer) begin() error {
+func (l *lexer) normal() error {
 	const failMsg = "expected a new statement"
 	ch, ok := l.advanceUpper()
 	if !ok {
@@ -143,14 +211,8 @@ func (l *lexer) begin() error {
 						switch ch {
 						case 'T':
 							ch, ok = l.advanceUpper()
-							if !ok {
-								return l.errorf(failMsg)
-							}
-							if unicode.IsSpace(ch) {
-								// Found SELECT keyword
-								l.emit(token{ tokType: tokenTypeKeywordSelect })
-								l.state = lexerStateAfterSelect
-								return
+							if !ok || unicode.IsSpace(ch) {
+								l.emit(token{tokType: tokenTypeKeywordSelect})
 							}
 						default:
 							return l.errorf(failMsg)
@@ -167,15 +229,36 @@ func (l *lexer) begin() error {
 		default:
 			return l.errorf(failMsg)
 		}
+	case '.':
+		l.emit(token{tokType: tokenTypeDot})
+	case ',':
+		l.emit(token{tokType: tokenTypeComma})
+	case '(':
+		l.emit(token{tokType: tokenTypeLParen})
+	case ')':
+		l.emit(token{tokType: tokenTypeRParen})
+	case ' ':
+	case '\t':
+	case '\r':
+	case '\n':
+		l.currentLine++
+	case '\'':
+		l.stringLiteral()
+	case '"':
+		l.quotedIentifier()
 	default:
 		return l.errorf(failMsg)
 	}
 }
 
-func (l *lexer) errorf(msg, args ...string) error {
+func (l *lexer) stringLiteral() error {
+
+}
+
+func (l *lexer) errorf(msg string, args ...string) error {
 	return lexerError(fmt.Sprintf(msg, args), l.line)
 }
 
 func lexerError(msg, line) error {
 	return fmt.Errorf("Error on line %d: %s", line, msg)
-} 
+}

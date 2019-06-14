@@ -1,6 +1,7 @@
 package main
 
 type tokenType int
+
 const (
 	tokenTypeKeywordSelect tokenType = iota
 	tokenTypeLiteral
@@ -18,5 +19,5 @@ const (
 
 type token struct {
 	tokType tokenType
-	value string
+	value   string
 }
