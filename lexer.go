@@ -216,7 +216,7 @@ func (l *lexer) normal() error {
 						ch, ok = l.advanceUpper()
 						if !ok {
 							return l.errorf(failMsg)
-						}
+						} 
 						switch ch {
 						case 'T':
 							ch, ok = l.advanceUpper()
