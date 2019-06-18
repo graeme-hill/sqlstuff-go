@@ -117,6 +117,15 @@ func (l *lexer) columnName() error {
 	if err != nil {
 		return err
 	}
+
+	// If followed by a dot then get the optional second part
+	ch, ok := l.advance()
+	if ok && ch == '.' {
+		second, err := l.symbol
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (l *lexer) symbol() string, error {
