@@ -2,15 +2,12 @@ package main
 
 import (
 	"fmt"
-	"unicode"
 )
 
-type lexerState int
-
-const (
-	lexerStateNormal lexerState = iota
-	lexerStateQuotedIdentifier
-)
+type charInfo struct {
+	ch       rune
+	location charLocation
+}
 
 func lex(sql string, emit func(token)) error {
 	l := newLexer(sql, emit)
@@ -18,256 +15,167 @@ func lex(sql string, emit func(token)) error {
 }
 
 type lexer struct {
-	sql              string
+	sql              []rune
 	length           int
 	currentCharIndex int
-	currentLine      int
-	state            lexerState
-	emit             func(Token)
+	currentLocation  charLocation
+	tokenStartIndex  int
+	tokenLocation    charLocation
+	emitCallback     func(token)
 }
 
-func newLexer(sql string, emit func(token)) {
-	return lexer{
-		sql:              sql,
+func newLexer(sql string, emit func(token)) *lexer {
+	return &lexer{
+		sql:              []rune(sql),
 		length:           len(sql),
 		currentCharIndex: 0,
-		currentLine:      1,
-		emit:             emit,
-		state:            lexerStateBegin,
+		currentLocation:  charLocation{line: 1, col: 1},
+		tokenStartIndex:  0,
+		tokenLocation:    charLocation{line: 1, col: 1},
+		emitCallback:     emit,
 	}
 }
 
-func (l *lexer) peek(offset int) (rune, bool) {
+func (l *lexer) emit(tok token) {
+	l.endWord()
+	l.emitCallback(tok)
+	l.resetToken()
+}
+
+func (l *lexer) peek(offset int) (charInfo, bool) {
 	i := l.currentCharIndex + offset
 	if i >= l.length {
-		return nil, false
+		return charInfo{}, false
 	}
-	return l.sql[i], true
+	return charInfo{ch: l.sql[i], location: l.currentLocation}, true
 }
 
-func (l *lexer) advance() (rune, bool) {
-	char, ok := l.peek(0)
+func (l *lexer) advance() (charInfo, bool) {
+	info, ok := l.peek(0)
 	l.currentCharIndex++
-	return char, ok
-}
-
-func (l *lexer) advanceUpper() (rune, bool) {
-	char, ok := l.advance()
-	if !ok {
-		return char, false
+	if info.ch == '\n' {
+		l.currentLocation.line++
+		l.currentLocation.col = 1
+	} else {
+		l.currentLocation.col++
 	}
-	return unicode.ToUpper(char), true
+	return info, ok
 }
 
 func (l *lexer) scan() error {
-	for l.currentCharIndex < len(l.sql) {
-		err := l.next()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *lexer) next() error {
-	switch lexerState {
-	case lexerStateBegin:
-		l.begin()
-	case lexerStateAfterSelect:
-		l.fields()
-	default:
-		return l.errorf("sql lexer encountered an unknown state")
-	}
-}
-
-func (l *lexer) fields() error {
 	for {
-		// get next expression in select list
-		err := l.expression()
+		more, err := l.next()
 		if err != nil {
 			return err
 		}
-		l.skipWhitespace()
-
-		// emit alias tokens if there is an alias
-		if l.check("AS", true) {
-			l.emit(token{tokType: tokenTypeKeywordAs})
-			err = l.columnName()
-			if err != nil {
-				return err
-			}
-			l.skipWhitespace()
-		}
-
-		// keep looping iff there is a comma
-		next, ok := l.peek(1)
-		if !ok || next != ',' {
+		if !more {
 			break
 		}
-		l.currentCharIndex++
 	}
-
 	return nil
 }
 
-// Examples: name or user.name
-func (l *lexer) columnName() error {
-	// Get the required first part
-	first, err := l.symbol()
-	if err != nil {
-		return err
-	}
-
-	// If followed by a dot then get the optional second part
-	ch, ok := l.advance()
-	if ok && ch == '.' {
-		second, err := l.symbol
-		if err != nil {
-			return err
-		}
-	}
-}
-
-func (l *lexer) symbol() string, error {
-	start := l.currentCharIndex
-	for {
-		ch, ok := 
-	}
-}
-
-func (l *lexer) check(expected string, capitalized bool) bool {
-	for i := 0; i < len(expected); i++ {
-		expectedChar := expected[i]
-		actualChar, ok := l.peek(i)
-		if !ok {
-			return false
-		}
-		if capitalized {
-			actualChar = unicode.ToUpper(actualChar)
-		}
-		if expectedChar != actualChar {
-			return false
-		}
-	}
-
-	// it matched so advance and return true
-	l.currentCharIndex += len(expected)
-	return true
-}
-
-func (l *lexer) expression() error {
-
-}
-
-func (l *lexer) skipWhitespace() {
-	for {
-		ch, ok := l.advance()
-		if !ok {
-			// there are no more chars so stop advancing
-			return
-		}
-
-		if ch == '\n' {
-			// started a new line so increment line index
-			l.currentLine++
-		}
-
-		if !unicode.IsSpace(ch) {
-			// not whitespace so stop advancing
-			return
-		}
-	}
-}
-
-func (l *lexer) normal() error {
-	const failMsg = "expected a new statement"
-	ch, ok := l.advanceUpper()
+func (l *lexer) next() (bool, error) {
+	chInfo, ok := l.advance()
 	if !ok {
-		return l.errorf(failMsg)
+		l.endWord()
+		return false, nil
 	}
+	ch := chInfo.ch
+	var err error = nil
+	more := true
 
 	switch ch {
-	// Look for SELECT
-	case 'S':
-		ch, ok = l.advanceUpper()
-		if !ok {
-			return l.errorf(failMsg)
-		}
-		switch ch {
-		case 'E':
-			ch, ok = l.advanceUpper()
-			if !ok {
-				return l.errorf(failMsg)
-			}
-			switch ch {
-			case 'L':
-				ch, ok = l.advanceUpper()
-				if !ok {
-					return l.errorf(failMsg)
-				}
-				switch ch {
-				case 'E':
-					ch, ok = l.advanceUpper()
-					if !ok {
-						return l.errorf(failMsg)
-					}
-					switch ch {
-					case 'C':
-						ch, ok = l.advanceUpper()
-						if !ok {
-							return l.errorf(failMsg)
-						} 
-						switch ch {
-						case 'T':
-							ch, ok = l.advanceUpper()
-							if !ok || unicode.IsSpace(ch) {
-								l.emit(token{tokType: tokenTypeKeywordSelect})
-							}
-						default:
-							return l.errorf(failMsg)
-						}
-					default:
-						return l.errorf(failMsg)
-					}
-				default:
-					return l.errorf(failMsg)
-				}
-			default:
-				return l.errorf(failMsg)
-			}
-		default:
-			return l.errorf(failMsg)
-		}
 	case '.':
-		l.emit(token{tokType: tokenTypeDot})
+		l.emit(token{tokType: tokenTypeDot, location: chInfo.location})
 	case ',':
-		l.emit(token{tokType: tokenTypeComma})
+		l.emit(token{tokType: tokenTypeComma, location: chInfo.location})
+	case ';':
+		l.emit(token{tokType: tokenTypeSemicolon, location: chInfo.location})
 	case '(':
-		l.emit(token{tokType: tokenTypeLParen})
+		l.emit(token{tokType: tokenTypeLParen, location: chInfo.location})
 	case ')':
-		l.emit(token{tokType: tokenTypeRParen})
+		l.emit(token{tokType: tokenTypeRParen, location: chInfo.location})
+	case '+':
+		l.emit(token{tokType: tokenTypePlus, location: chInfo.location})
+	case '-':
+		l.emit(token{tokType: tokenTypeMinus, location: chInfo.location})
+	case '/':
+		l.emit(token{tokType: tokenTypeSlash, location: chInfo.location})
+	case '*':
+		l.emit(token{tokType: tokenTypeAsterisk, location: chInfo.location})
 	case ' ':
+		fallthrough
 	case '\t':
+		fallthrough
 	case '\r':
+		fallthrough
 	case '\n':
-		l.currentLine++
+		l.eatWhitespace()
 	case '\'':
-		l.stringLiteral()
+		more, err = l.wrapped('\'', tokenTypeString)
 	case '"':
-		l.quotedIentifier()
+		more, err = l.wrapped('"', tokenTypeWord)
 	default:
-		return l.errorf(failMsg)
+		// keep going with this word
 	}
+
+	return more, err
 }
 
-func (l *lexer) stringLiteral() error {
+func (l *lexer) eatWhitespace() {
+	l.endWord()
+}
 
+func (l *lexer) endWord() {
+	if l.currentCharIndex > l.tokenStartIndex+1 {
+		substr := l.sql[l.tokenStartIndex : l.currentCharIndex-1]
+		l.emitCallback(token{tokType: tokenTypeWord, value: substr, location: l.tokenLocation})
+	}
+	l.resetToken()
+}
+
+func (l *lexer) resetToken() {
+	l.tokenLocation = l.currentLocation
+	l.tokenStartIndex = l.currentCharIndex
+}
+
+func (l *lexer) wrapped(terminator rune, tokType tokenType) (bool, error) {
+	l.endWord()
+
+	escaping := false
+	start := l.currentCharIndex
+	startLoc := l.currentLocation
+	startLoc.col--
+
+	for {
+		escapingThisIteration := false
+		current, ok := l.advance()
+		if !ok {
+			return false, l.errorf("looking for %s", string(terminator))
+		}
+
+		if !escaping {
+			next, hasNext := l.peek(1)
+			if current.ch == terminator {
+				if hasNext && next.ch == terminator {
+					escapingThisIteration = true
+				} else {
+					break
+				}
+			}
+		}
+
+		escaping = escapingThisIteration
+	}
+
+	substr := l.sql[start : l.currentCharIndex-1]
+	l.emitCallback(token{tokType: tokType, value: substr, location: startLoc})
+	l.resetToken()
+	return true, nil
 }
 
 func (l *lexer) errorf(msg string, args ...string) error {
-	return lexerError(fmt.Sprintf(msg, args), l.line)
-}
-
-func lexerError(msg, line) error {
-	return fmt.Errorf("Error on line %d: %s", line, msg)
+	formatted := fmt.Sprintf(msg, args)
+	return fmt.Errorf("Error at line %d:%d: %s", l.currentLocation.line, l.currentLocation.col, formatted)
 }

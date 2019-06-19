@@ -3,21 +3,21 @@ package main
 type tokenType int
 
 const (
-	tokenTypeKeywordSelect tokenType = iota
-	tokenTypeLiteral
+	tokenTypeWord tokenType = iota
 	tokenTypeLParen
 	tokenTypeRParen
-	tokenTypeLDoubleQuote
-	tokenTypeRDoubleQuote
-	tokenTypeLSingleQuote
-	tokenTypeRSingleQuote
+	tokenTypeString
 	tokenTypeDot
-	tokenTypeIdentifier
 	tokenTypeComma
 	tokenTypeSemicolon
+	tokenTypePlus
+	tokenTypeMinus
+	tokenTypeSlash
+	tokenTypeAsterisk
 )
 
 type token struct {
-	tokType tokenType
-	value   string
+	tokType  tokenType
+	value    []rune
+	location charLocation
 }

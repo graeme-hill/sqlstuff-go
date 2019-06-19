@@ -1,121 +1,131 @@
 package main
 
-type setOpType int
-const (
-	SetOpUnion setOpType = iota
-	SetOpUnionAll
-	SetOpIntersect
-	SetOpExcept
-)
+// type setOpType int
 
-type binaryCondOpType int
-const (
-	BinaryCondOpIs binaryCondOpType = iota
-	BinaryCondOpEqual
-	BinaryCondOpNotEqual
-	BinaryCondOpGreatThan
-	BinaryCondOpGreatThanOrEqual
-	BinaryCondOpLessThan
-	BinaryCondOpLessThanOrEqual
-)
+// const (
+// 	SetOpUnion setOpType = iota
+// 	SetOpUnionAll
+// 	SetOpIntersect
+// 	SetOpExcept
+// )
 
-type binaryExprOpType int
-const (
-	BinaryExprOpAdd binaryExprOpType = iota
-	BinaryExprOpSubtract
-	BinaryExprOpMultiply
-	BinaryExprOpDivide
-)
+// type binaryCondOpType int
 
-type logicalOpType int
-const (
-	LogicalOpAnd logicalOpType = iota
-	LogicalOpOr
-)
+// const (
+// 	BinaryCondOpIs binaryCondOpType = iota
+// 	BinaryCondOpEqual
+// 	BinaryCondOpNotEqual
+// 	BinaryCondOpGreatThan
+// 	BinaryCondOpGreatThanOrEqual
+// 	BinaryCondOpLessThan
+// 	BinaryCondOpLessThanOrEqual
+// )
 
-type Statement interface {
-	isStatement()
-}
-func (s *Select) isStatement() {}
+// type binaryExprOpType int
 
-type Expression interface {
-	isExpression()
-}
-func (f *FunctionExpression) isExpression() {}
-func (b *BinaryExpression) isExpression() {}
-func (f *IdentifierExpression) identifierExpression() {}
-func (s *StringLiteral) identifierExpression() {}
-func (n *NumberLiteral) identifierExpression() {}
+// const (
+// 	BinaryExprOpAdd binaryExprOpType = iota
+// 	BinaryExprOpSubtract
+// 	BinaryExprOpMultiply
+// 	BinaryExprOpDivide
+// )
 
-type StringLiteral struct {
-	Value string
-}
+// type logicalOpType int
 
-type NumberLiteral struct {
-	Value string
-}
+// const (
+// 	LogicalOpAnd logicalOpType = iota
+// 	LogicalOpOr
+// )
 
-type ColumnExpression struct {
-	ColumnName string
-	TableName string
-}
+// type Statement interface {
+// 	isStatement()
+// }
 
-type FunctionExpression struct {
-	FuncName string
-	Parameters []Expression
-}
+// func (s *Select) isStatement() {}
 
-type BinaryExpression struct {
-	Left Expression
-	Right Expression
-	Op binaryExprOpType
-}
+// type Expression interface {
+// 	isExpression()
+// }
 
-type Field struct {
-	Alias string
-	Expr Expression
-}
+// func (f *FunctionExpression) isExpression() {}
+// func (b *BinaryExpression) isExpression()   {}
+// func (s *StringLiteral) isExpression()      {}
+// func (n *NumberLiteral) isExpression()      {}
 
-type SelectTarget struct {
-	Alias string
-	TableName string
-	Subselect *Select
-}
+// type StringLiteral struct {
+// 	Value string
+// }
 
-type Condition interface {
-	isCondition()
-}
-func (b *BinaryCondition) isCondition() {}
-func (l *LogicalCondition) isCondition() {}
+// type NumberLiteral struct {
+// 	Value string
+// }
 
-type BinaryExpression struct {
-	Left Expression
-	Right Expression
-	Op binaryCondOpType
-}
+// type ColumnExpression struct {
+// 	ColumnName string
+// 	TableName  string
+// }
 
-type LogicalCondition struct {
-	Left Condition
-	Right Condition
-	Op logicalOpType
-}
+// type FunctionExpression struct {
+// 	FuncName   string
+// 	Parameters []Expression
+// }
 
-type OrderExpr struct {
-	desc bool
-	expr Expr
-}
+// type BinaryExpression struct {
+// 	Left  Expression
+// 	Right Expression
+// 	Op    binaryExprOpType
+// }
 
-type NextSelect struct {
-	SetOp setOpType
-	Query Select
-}
+// type Field struct {
+// 	Alias string
+// 	Expr  Expression
+// }
 
-type Select struct {
-	Fields []Field
-	From []SelectTarget
-	Joins []Join
-	Where Condition
-	Having Condition
-	OrderBy []OrderExpr
-	Next *NextSelect
-}
+// type SelectTarget struct {
+// 	Alias     string
+// 	TableName string
+// 	Subselect *Select
+// }
+
+// type Condition interface {
+// 	isCondition()
+// }
+
+// func (b *BinaryCondition) isCondition()  {}
+// func (l *LogicalCondition) isCondition() {}
+
+// type BinaryCondition struct {
+// 	Left  Expression
+// 	Right Expression
+// 	Op    binaryCondOpType
+// }
+
+// type LogicalCondition struct {
+// 	Left  Condition
+// 	Right Condition
+// 	Op    logicalOpType
+// }
+
+// type OrderExpr struct {
+// 	desc bool
+// 	expr Expression
+// }
+
+// type NextSelect struct {
+// 	SetOp setOpType
+// 	Query Select
+// }
+
+// type Join struct {
+// 	// to do
+// }
+
+// type Select struct {
+// 	Fields  []Field
+// 	From    []SelectTarget
+// 	Joins   []Join
+// 	Where   Condition
+// 	Having  Condition
+// 	OrderBy []OrderExpr
+// 	Next    *NextSelect
+// }
