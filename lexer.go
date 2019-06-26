@@ -156,8 +156,10 @@ func (l *lexer) wrapped(terminator rune, tokType tokenType) (bool, error) {
 		}
 
 		if !escaping {
-			next, hasNext := l.peek(1)
-			if current.ch == terminator {
+			if current.ch == '\\' {
+				escapingThisIteration = true
+			} else if current.ch == terminator {
+				next, hasNext := l.peek(0)
 				if hasNext && next.ch == terminator {
 					escapingThisIteration = true
 				} else {

@@ -76,11 +76,18 @@ func TestLexerString(t *testing.T) {
 	requireTok(t, tokens[0], tokenTypeString, "foo  bar", 1, 1)
 }
 
-func TestLexerStringEscaped(t *testing.T) {
+func TestLexerStringEscapedWithBackslash(t *testing.T) {
 	tokens, err := getTokens("'foo\\'s'")
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	requireTok(t, tokens[0], tokenTypeString, "foo\\'s", 1, 1)
+}
+
+func TestLexerStringEscapedWithDoubleSingleQuote(t *testing.T) {
+	tokens, err := getTokens("'foo''s'")
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	requireTok(t, tokens[0], tokenTypeString, "foo''s", 1, 1)
 }
 
 func TestLexerStringInvalid(t *testing.T) {
