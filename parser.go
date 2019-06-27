@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -48,6 +49,7 @@ func (p *parser) scan() ([]Statement, error) {
 			}
 		}
 
+		// SELECT...
 		if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "SELECT" {
 			selectStatement, err := p.scanSelect()
 			if err != nil {
@@ -58,10 +60,266 @@ func (p *parser) scan() ([]Statement, error) {
 			continue
 		}
 
+		// CREATE ...
+		if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "CREATE" {
+			tok, done, err = p.reader.Next()
+			if err != nil {
+				return nil, err
+			}
+
+			if done {
+				return nil, errors.New("Expecting completion of CREATE statement but got EOF")
+			}
+
+			// CREATE TABLE...
+			if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "TABLE" {
+				createTableStatement, err := p.scanCreateTable()
+				if err != nil {
+					return nil, err
+				}
+				statements = append(statements, createTableStatement)
+				requireSemicolon = true
+				continue
+			}
+		}
+
 		return nil, fmt.Errorf("Expecting start of statement but got <%s>", tokenString(tok))
 	}
 
 	return statements, nil
+}
+
+func (p *parser) scanCreateTable() (CreateTable, error) {
+
+	// get table name
+	nameTok, err := p.requireToken(tokenTypeWord)
+	if err != nil {
+		return CreateTable{}, err
+	}
+	createTable := CreateTable{
+		Name:    string(nameTok.value),
+		Columns: []ColumnDefinition{},
+	}
+
+	// look for '(' to start column list
+	_, err = p.requireToken(tokenTypeLParen)
+	if err != nil {
+		return CreateTable{}, err
+	}
+
+	// columns
+	for {
+		// Stop looping if hit ')'. There may be zero columns!
+		_, foundRParen := p.peekToken(tokenTypeRParen)
+		if foundRParen {
+			_, _, err := p.reader.Next()
+			if err != nil {
+				return CreateTable{}, err
+			}
+			break
+		}
+
+		col, more, err := p.scanColumnDef()
+		if err != nil {
+			return CreateTable{}, err
+		}
+		createTable.Columns = append(createTable.Columns, col)
+
+		if !more {
+			break
+		}
+	}
+
+	return createTable, nil
+}
+
+func (p *parser) scanColumnDef() (ColumnDefinition, bool, error) {
+	def := ColumnDefinition{}
+	colNameTok, err := p.requireToken(tokenTypeWord)
+	if err != nil {
+		return ColumnDefinition{}, false, err
+	}
+	def.Name = string(colNameTok.value)
+
+	typ, err := p.scanDataType()
+	if err != nil {
+		return ColumnDefinition{}, false, err
+	}
+	def.Type = typ
+
+	err = p.applyTypeParams(&def)
+	if err != nil {
+		return ColumnDefinition{}, false, err
+	}
+
+	err = p.applyConstraints(&def)
+	if err != nil {
+		return ColumnDefinition{}, false, err
+	}
+
+	next, done, err := p.reader.Next()
+	if err != nil {
+		return ColumnDefinition{}, false, err
+	}
+	if done {
+		return ColumnDefinition{}, false, errors.New("Unexpected EOF")
+	}
+	more := next.tokType == tokenTypeComma
+
+	return def, more, nil
+}
+
+func (p *parser) applyTypeParams(def *ColumnDefinition) error {
+	_, hasParams := p.checkToken(tokenTypeLParen)
+	if hasParams {
+		tok, err := p.requireToken(tokenTypeWord)
+		if err != nil {
+			return err
+		}
+		num, err := strconv.Atoi(string(tok.value))
+		if err != nil {
+			return err
+		}
+		def.Param1 = num
+
+		_, comma := p.checkToken(tokenTypeComma)
+		if comma {
+			tok, err = p.requireToken(tokenTypeWord)
+			if err != nil {
+				return err
+			}
+			num, err = strconv.Atoi(string(tok.value))
+			if err != nil {
+				return err
+			}
+			def.Param2 = num
+		}
+
+		_, err = p.requireToken(tokenTypeRParen)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) applyConstraints(def *ColumnDefinition) error {
+	// Defaults
+	def.Nullable = true
+
+	// Flags to avoid duplicate constraints
+	alreadyNullable := false
+	alreadyPrimaryKey := false
+
+	for {
+		if p.checkWord("NULL") {
+			if alreadyNullable {
+				return errors.New("Cannot specify null constraint more than once")
+			}
+			alreadyNullable = true
+			def.Nullable = true
+		}
+
+		if p.checkWord("NOT") {
+			if p.checkWord("NULL") {
+				if alreadyNullable {
+					return errors.New("Cannot specify null constraint more than once")
+				}
+				alreadyNullable = true
+				def.Nullable = false
+			} else {
+				return errors.New("Expecting 'NOT' to be followed by 'NULL' but was not.")
+			}
+		}
+
+		if p.checkWord("PRIMARY") {
+			if p.checkWord("KEY") {
+				if alreadyPrimaryKey {
+					return errors.New("Cannot specify PRIMARY KEY more than once")
+				}
+				alreadyPrimaryKey = true
+				// don't actually record this, just validate
+			}
+		}
+
+		_, nextIsComma := p.peekToken(tokenTypeComma)
+		if nextIsComma {
+			break
+		}
+
+		_, nextIsRParen := p.peekToken(tokenTypeRParen)
+		if nextIsRParen {
+			break
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) scanDataType() (dataType, error) {
+	if p.checkWord("INT") {
+		return DataTypeInteger, nil
+	}
+	if p.checkWord("VARCHAR") {
+		return DataTypeVarChar, nil
+	}
+	return 0, errors.New("Unknown data type")
+}
+
+func (p *parser) requireToken(tokType tokenType) (token, error) {
+	next, done, err := p.reader.Next()
+	if err != nil {
+		return token{}, err
+	}
+	if done {
+		return token{}, fmt.Errorf(
+			"Expected '%s' but got EOF",
+			tokenValueString(token{tokType: tokType}))
+	}
+	if next.tokType != tokType {
+		return token{}, fmt.Errorf(
+			"Expected '%s' but got <%s>",
+			tokenValueString(token{tokType: tokType}),
+			tokenString(next))
+	}
+	return next, nil
+}
+
+func (p *parser) advance() error {
+	_, _, err := p.reader.Next()
+	return err
+}
+
+func (p *parser) checkWord(word string) bool {
+	next, done, err := p.reader.Peek()
+	if err != nil || done || next.tokType != tokenTypeWord || !strings.EqualFold(string(next.value), word) {
+		return false
+	}
+	_, _, _ = p.reader.Next()
+	return true
+}
+
+func (p *parser) peekToken(tokType tokenType) (token, bool) {
+	next, done, err := p.reader.Peek()
+	if err != nil {
+		return token{}, false
+	}
+	if done {
+		return token{}, false
+	}
+	if next.tokType != tokType {
+		return token{}, false
+	}
+	return next, true
+}
+
+func (p *parser) checkToken(tokType tokenType) (token, bool) {
+	tok, found := p.peekToken(tokType)
+	if found {
+		_ = p.advance()
+	}
+	return tok, found
 }
 
 func (p *parser) scanSelect() (Select, error) {
