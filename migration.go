@@ -51,7 +51,7 @@ func ReadMigrationsDir(dir string) ([]*Migration, error) {
 
 	// Sort keys lexicographically
 	keys := []string{}
-	for k, _ := range migrations {
+	for k := range migrations {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -69,9 +69,7 @@ func parseMigrationFileName(fileName string) (string, bool) {
 }
 
 func getMigrationName(fileName string) string {
-	underscoreParts := strings.Split(fileName, "_")
-	lastUnderscorePart := underscoreParts[len(underscoreParts)-1]
-	dotParts := strings.Split(lastUnderscorePart, ".")
+	dotParts := strings.Split(fileName, ".")
 	return dotParts[0]
 }
 

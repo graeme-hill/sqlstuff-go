@@ -113,3 +113,17 @@ func TestCreateTable(t *testing.T) {
 	require.Equal(t, 0, create.Columns[1].Param2)
 	require.True(t, create.Columns[1].Nullable)
 }
+
+func TestAddColumn(t *testing.T) {
+	statements, err := Parse("ALTER TABLE people ADD COLUMN name VARCHAR(200) NOT NULL")
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	addColumn, ok := statements[0].(AddColumn)
+	require.True(t, ok)
+	require.Equal(t, "people", addColumn.TableName)
+	require.Equal(t, "name", addColumn.Column.Name)
+	require.Equal(t, DataTypeVarChar, addColumn.Column.Type)
+	require.False(t, addColumn.Column.Nullable)
+	require.Equal(t, 200, addColumn.Column.Param1)
+}

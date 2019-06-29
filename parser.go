@@ -50,7 +50,7 @@ func (p *parser) scan() ([]Statement, error) {
 		}
 
 		// SELECT...
-		if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "SELECT" {
+		if isKeyword(tok, "SELECT") {
 			selectStatement, err := p.scanSelect()
 			if err != nil {
 				return nil, err
@@ -61,18 +61,14 @@ func (p *parser) scan() ([]Statement, error) {
 		}
 
 		// CREATE ...
-		if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "CREATE" {
-			tok, done, err = p.reader.Next()
+		if isKeyword(tok, "CREATE") {
+			tok, err = p.requireToken(tokenTypeWord)
 			if err != nil {
 				return nil, err
 			}
 
-			if done {
-				return nil, errors.New("Expecting completion of CREATE statement but got EOF")
-			}
-
-			// CREATE TABLE...
-			if tok.tokType == tokenTypeWord && strings.ToUpper(string(tok.value)) == "TABLE" {
+			// CREATE TABLE ...
+			if isKeyword(tok, "TABLE") {
 				createTableStatement, err := p.scanCreateTable()
 				if err != nil {
 					return nil, err
@@ -81,6 +77,29 @@ func (p *parser) scan() ([]Statement, error) {
 				requireSemicolon = true
 				continue
 			}
+
+			return nil, fmt.Errorf("Invalid CREATE statement at %s", tokenString(tok))
+		}
+
+		// ALTER ...
+		if isKeyword(tok, "ALTER") {
+			tok, err = p.requireToken(tokenTypeWord)
+			if err != nil {
+				return nil, err
+			}
+
+			// ALTER TABLE ...
+			if isKeyword(tok, "TABLE") {
+				alterTableStatement, err := p.scanAlterTable()
+				if err != nil {
+					return nil, err
+				}
+				statements = append(statements, alterTableStatement)
+				requireSemicolon = true
+				continue
+			}
+
+			return nil, fmt.Errorf("Invalid ALTER statement at %s", tokenString(tok))
 		}
 
 		return nil, fmt.Errorf("Expecting start of statement but got <%s>", tokenString(tok))
@@ -89,6 +108,48 @@ func (p *parser) scan() ([]Statement, error) {
 	return statements, nil
 }
 
+func isKeyword(tok token, keyword string) bool {
+	return tok.tokType == tokenTypeWord && strings.EqualFold(string(tok.value), keyword)
+}
+
+// Reads after "ALTER TABLE"
+func (p *parser) scanAlterTable() (Statement, error) {
+
+	// get table name
+	nameTok, err := p.requireToken(tokenTypeWord)
+	if err != nil {
+		return AddColumn{}, nil
+	}
+
+	next, err := p.requireToken(tokenTypeWord)
+	if err != nil {
+		return AddColumn{}, nil
+	}
+
+	// ALTER TABLE ___ ADD ...
+	if isKeyword(next, "ADD") {
+		next, err = p.requireToken(tokenTypeWord)
+		if err != nil {
+			return AddColumn{}, nil
+		}
+
+		// ALTER TABLE ___ ADD COLUMN ...
+		if isKeyword(next, "COLUMN") {
+			def, _, err := p.scanColumnDef()
+			if err != nil {
+				return AddColumn{}, err
+			}
+			return AddColumn{
+				TableName: string(nameTok.value),
+				Column:    def,
+			}, nil
+		}
+	}
+
+	return AddColumn{}, fmt.Errorf("Unsupported ALTER TABLE statement at <%s>", tokenString(next))
+}
+
+// Reads after "CREATE TABLE"
 func (p *parser) scanCreateTable() (CreateTable, error) {
 
 	// get table name
@@ -133,6 +194,7 @@ func (p *parser) scanCreateTable() (CreateTable, error) {
 	return createTable, nil
 }
 
+// Reads an expression like "first_name VARCHAR(200) NOT NULL"
 func (p *parser) scanColumnDef() (ColumnDefinition, bool, error) {
 	def := ColumnDefinition{}
 	colNameTok, err := p.requireToken(tokenTypeWord)
@@ -161,10 +223,7 @@ func (p *parser) scanColumnDef() (ColumnDefinition, bool, error) {
 	if err != nil {
 		return ColumnDefinition{}, false, err
 	}
-	if done {
-		return ColumnDefinition{}, false, errors.New("Unexpected EOF")
-	}
-	more := next.tokType == tokenTypeComma
+	more := !done && next.tokType == tokenTypeComma
 
 	return def, more, nil
 }
@@ -212,8 +271,11 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 	alreadyNullable := false
 	alreadyPrimaryKey := false
 
+	didAnything := false
+
 	for {
 		if p.checkWord("NULL") {
+			didAnything = true
 			if alreadyNullable {
 				return errors.New("Cannot specify null constraint more than once")
 			}
@@ -222,6 +284,7 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 		}
 
 		if p.checkWord("NOT") {
+			didAnything = true
 			if p.checkWord("NULL") {
 				if alreadyNullable {
 					return errors.New("Cannot specify null constraint more than once")
@@ -234,6 +297,7 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 		}
 
 		if p.checkWord("PRIMARY") {
+			didAnything = true
 			if p.checkWord("KEY") {
 				if alreadyPrimaryKey {
 					return errors.New("Cannot specify PRIMARY KEY more than once")
@@ -243,15 +307,10 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 			}
 		}
 
-		_, nextIsComma := p.peekToken(tokenTypeComma)
-		if nextIsComma {
+		if !didAnything {
 			break
 		}
-
-		_, nextIsRParen := p.peekToken(tokenTypeRParen)
-		if nextIsRParen {
-			break
-		}
+		didAnything = false
 	}
 
 	return nil
@@ -358,7 +417,7 @@ func (p *parser) scanFieldList() ([]Field, error) {
 			// it's a field with no alias, and there are more fields to come
 			fields = append(fields, Field{Expr: expr})
 			continue
-		} else if next.tokType == tokenTypeWord && strings.ToUpper(string(next.value)) == "AS" {
+		} else if isKeyword(next, "AS") {
 			alias, err := p.scanAlias()
 			if err != nil {
 				return nil, err
@@ -374,12 +433,12 @@ func (p *parser) scanFieldList() ([]Field, error) {
 
 			if next.tokType == tokenTypeComma {
 				continue
-			} else if next.tokType == tokenTypeWord && strings.ToUpper(string(next.value)) == "FROM" {
+			} else if isKeyword(next, "FROM") {
 				break
 			} else {
 				return nil, errors.New("SELECT statement missing FROM")
 			}
-		} else if next.tokType == tokenTypeWord && strings.ToUpper(string(next.value)) == "FROM" {
+		} else if isKeyword(next, "FROM") {
 			fields = append(fields, Field{Expr: expr})
 			break
 		} else {
@@ -411,7 +470,7 @@ func (p *parser) scanSelectTarget() (SelectTarget, error) {
 			return SelectTarget{}, errors.New("Expecting SELECT but got EOF")
 		}
 
-		if next.tokType == tokenTypeWord && strings.ToUpper(string(next.value)) == "SELECT" {
+		if isKeyword(next, "SELECT") {
 			subSelect, err := p.scanSelect()
 			if err != nil {
 				return SelectTarget{}, err
@@ -441,7 +500,7 @@ func (p *parser) scanSelectTarget() (SelectTarget, error) {
 		return target, nil
 	}
 
-	if next.tokType == tokenTypeWord && strings.ToUpper(string(next.value)) == "AS" {
+	if isKeyword(next, "AS") {
 		_, _, err := p.reader.Next()
 		if err != nil {
 			return SelectTarget{}, err

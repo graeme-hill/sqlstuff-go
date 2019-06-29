@@ -105,3 +105,20 @@ func (m *ModelBuilder) handleDropColumnStmt(dc DropColumn) error {
 	tbl.Columns = append(tbl.Columns[:toRemove], tbl.Columns[toRemove+1:]...)
 	return nil
 }
+
+func ModelFromMigrations(migrations []*Migration) (Model, error) {
+	builder := NewModelBuilder()
+	for _, migration := range migrations {
+		statements, err := Parse(migration.UpSQL)
+		if err != nil {
+			return Model{}, err
+		}
+		for _, stmt := range statements {
+			err = builder.handleStmt(stmt)
+			if err != nil {
+				return Model{}, err
+			}
+		}
+	}
+	return builder.model, nil
+}
