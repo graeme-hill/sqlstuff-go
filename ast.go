@@ -180,7 +180,7 @@ type NextSelect struct {
 }
 
 type Join struct {
-	// to do
+	Target SelectTarget
 }
 
 type Select struct {
