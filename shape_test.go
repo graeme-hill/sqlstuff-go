@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetShape(t *testing.T) {
+func TestGetShapeBasic(t *testing.T) {
 	migrations, err := ReadMigrationsDir("./test/migrations")
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)

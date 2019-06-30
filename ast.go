@@ -1,5 +1,15 @@
 package main
 
+type joinType int
+
+const (
+	JoinTypeInner joinType = iota
+	JoinTypeLeftOuter
+	JoinTypeRightOuter
+	JoinTypeFullOuter
+	JoinTypeCross
+)
+
 type setOpType int
 
 const (
@@ -154,8 +164,8 @@ type Condition interface {
 	isCondition()
 }
 
-func (b *BinaryCondition) isCondition()  {}
-func (l *LogicalCondition) isCondition() {}
+func (b BinaryCondition) isCondition()  {}
+func (l LogicalCondition) isCondition() {}
 
 type BinaryCondition struct {
 	Left  Expression
@@ -180,7 +190,9 @@ type NextSelect struct {
 }
 
 type Join struct {
+	Type   joinType
 	Target SelectTarget
+	On     Condition
 }
 
 type Select struct {

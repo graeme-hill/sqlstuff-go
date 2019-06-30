@@ -392,9 +392,15 @@ func (p *parser) scanSelect() (Select, error) {
 		return Select{}, err
 	}
 
+	joins, err := p.scanJoins()
+	if err != nil {
+		return Select{}, err
+	}
+
 	return Select{
 		Fields: fields,
 		From:   target,
+		Joins:  joins,
 	}, nil
 }
 
@@ -446,6 +452,156 @@ func (p *parser) scanFieldList() ([]Field, error) {
 		}
 	}
 	return fields, nil
+}
+
+func (p *parser) scanJoins() ([]Join, error) {
+	joins := []Join{}
+
+	for {
+		join := Join{}
+
+		// Find join type (or detect that there are no more joins)
+		if p.checkWord("LEFT") {
+			p.checkWord("OUTER")
+			if p.checkWord("JOIN") {
+				join.Type = JoinTypeLeftOuter
+			} else {
+				return nil, errors.New("Expected 'JOIN' after 'LEFT [OUTER]'")
+			}
+		} else if p.checkWord("RIGHT") {
+			p.checkWord("OUTER")
+			if p.checkWord("JOIN") {
+				join.Type = JoinTypeRightOuter
+			} else {
+				return nil, errors.New("Expected 'JOIN' after 'RIGHT [OUTER]'")
+			}
+		} else if p.checkWord("JOIN") {
+			join.Type = JoinTypeInner
+		} else if p.checkWord("INNER") {
+			if p.checkWord("JOIN") {
+				join.Type = JoinTypeInner
+			} else {
+				return nil, errors.New("Expected 'JOIN' after 'INNER'")
+			}
+		} else {
+			break
+		}
+
+		// If got here then it is a join and we know the type, so now parse the
+		// thing it is joining with.
+		joinTarget, err := p.scanSelectTarget()
+		if err != nil {
+			return nil, err
+		}
+		join.Target = joinTarget
+
+		// Now parse the join condition (the ON clause).
+		if !p.checkWord("ON") {
+			return nil, errors.New("Missing ON clause in JOIN")
+		}
+		cond, err := p.scanCondition()
+		if err != nil {
+			return nil, err
+		}
+		join.On = cond
+
+		joins = append(joins, join)
+	}
+
+	return joins, nil
+}
+
+func (p *parser) scanCondition() (Condition, error) {
+	var left Condition
+	left, err := p.scanBinaryCondition()
+	if err != nil {
+		return BinaryCondition{}, err
+	}
+
+	for {
+		if p.checkWord("AND") {
+			right, err := p.scanBinaryCondition()
+			if err != nil {
+				return BinaryCondition{}, err
+			}
+			left = LogicalCondition{
+				Left:  left,
+				Right: right,
+				Op:    LogicalOpAnd,
+			}
+		} else if p.checkWord("OR") {
+			right, err := p.scanBinaryCondition()
+			if err != nil {
+				return BinaryCondition{}, err
+			}
+			left = LogicalCondition{
+				Left:  left,
+				Right: right,
+				Op:    LogicalOpOr,
+			}
+		} else {
+			break
+		}
+	}
+
+	return left, nil
+}
+
+func (p *parser) scanBinaryCondition() (BinaryCondition, error) {
+	// Left
+	left, err := p.scanExpr()
+	if err != nil {
+		return BinaryCondition{}, nil
+	}
+
+	// Operator
+	next, done, err := p.reader.Next()
+	if err != nil {
+		return BinaryCondition{}, nil
+	}
+	if done {
+		return BinaryCondition{}, errors.New("Expecting operator but got EOF")
+	}
+
+	op, err := getBinaryConditionOperator(next)
+	if err != nil {
+		return BinaryCondition{}, nil
+	}
+
+	// Right
+	right, err := p.scanExpr()
+	if err != nil {
+		return BinaryCondition{}, nil
+	}
+
+	return BinaryCondition{
+		Left:  left,
+		Right: right,
+		Op:    op,
+	}, nil
+}
+
+func getBinaryConditionOperator(tok token) (binaryCondOpType, error) {
+	switch tok.tokType {
+	case tokenTypeLess:
+		return BinaryCondOpLessThan, nil
+	case tokenTypeLessOrEqual:
+		return BinaryCondOpLessThanOrEqual, nil
+	case tokenTypeGreater:
+		return BinaryCondOpGreatThan, nil
+	case tokenTypeGreaterOrEqual:
+		return BinaryCondOpGreatThanOrEqual, nil
+	case tokenTypeEqual:
+		return BinaryCondOpEqual, nil
+	case tokenTypeNotEqual:
+		return BinaryCondOpNotEqual, nil
+	case tokenTypeWord:
+		if strings.EqualFold("IS", string(tok.value)) {
+			return BinaryCondOpIs, nil
+		}
+	}
+
+	return 0, fmt.Errorf("Unknown binary condition operator at <%s>", tokenString(tok))
 }
 
 func (p *parser) scanSelectTarget() (SelectTarget, error) {
@@ -500,27 +656,44 @@ func (p *parser) scanSelectTarget() (SelectTarget, error) {
 		return target, nil
 	}
 
-	if isKeyword(next, "AS") {
-		_, _, err := p.reader.Next()
-		if err != nil {
-			return SelectTarget{}, err
-		}
-
-		next, done, err = p.reader.Next()
-		if err != nil {
-			return SelectTarget{}, err
-		}
-		if done {
-			return SelectTarget{}, errors.New("Expected alias but got EOF")
-		}
-		if next.tokType != tokenTypeWord {
-			return SelectTarget{}, fmt.Errorf("Expected alias but got <%s>", tokenString(next))
-		}
-
+	if isSelectTargetAlias(next) {
 		target.Alias = string(next.value)
+		err = p.advance()
+		if err != nil {
+			return SelectTarget{}, nil
+		}
 	}
 
 	return target, nil
+}
+
+func isSelectTargetAlias(tok token) bool {
+	if tok.tokType != tokenTypeWord {
+		return false
+	}
+
+	switch strings.ToUpper(string(tok.value)) {
+	case "INNER":
+		return false
+	case "RIGHT":
+		return false
+	case "LEFT":
+		return false
+	case "FULL":
+		return false
+	case "CROSS":
+		return false
+	case "WHERE":
+		return false
+	case "HAVING":
+		return false
+	case "GROUP":
+		return false
+	case "ORDER":
+		return false
+	default:
+		return true
+	}
 }
 
 func (p *parser) scanAlias() (string, error) {

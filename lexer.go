@@ -86,6 +86,29 @@ func (l *lexer) next() (bool, error) {
 	more := true
 
 	switch ch {
+	case '<':
+		{
+			ahead, ok := l.peek(1)
+			if ok && ahead.ch == '=' {
+				_, _ = l.advance()
+				l.emit(token{tokType: tokenTypeLessOrEqual, location: chInfo.location})
+			} else if ok && ahead.ch == '>' {
+				_, _ = l.advance()
+				l.emit(token{tokType: tokenTypeNotEqual, location: chInfo.location})
+			} else {
+				l.emit(token{tokType: tokenTypeLess, location: chInfo.location})
+			}
+		}
+	case '>':
+		{
+			ahead, ok := l.peek(1)
+			if ok && ahead.ch == '=' {
+				_, _ = l.advance()
+				l.emit(token{tokType: tokenTypeGreaterOrEqual, location: chInfo.location})
+			} else {
+				l.emit(token{tokType: tokenTypeGreater, location: chInfo.location})
+			}
+		}
 	case '.':
 		l.emit(token{tokType: tokenTypeDot, location: chInfo.location})
 	case ',':

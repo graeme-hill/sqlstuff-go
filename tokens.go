@@ -14,6 +14,12 @@ const (
 	tokenTypeMinus
 	tokenTypeSlash
 	tokenTypeAsterisk
+	tokenTypeLess
+	tokenTypeLessOrEqual
+	tokenTypeGreater
+	tokenTypeGreaterOrEqual
+	tokenTypeEqual
+	tokenTypeNotEqual
 )
 
 type token struct {

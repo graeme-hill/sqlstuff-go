@@ -29,7 +29,7 @@ func TestBasicSelect(t *testing.T) {
 }
 
 func TestSubSelect(t *testing.T) {
-	statements, err := Parse("SELECT things.foo as stuff FROM (select bar from blah) AS things")
+	statements, err := Parse("SELECT things.foo as stuff FROM (select bar from blah) things")
 	require.NoError(t, err)
 	require.Len(t, statements, 1)
 
@@ -126,4 +126,85 @@ func TestAddColumn(t *testing.T) {
 	require.Equal(t, DataTypeVarChar, addColumn.Column.Type)
 	require.False(t, addColumn.Column.Nullable)
 	require.Equal(t, 200, addColumn.Column.Param1)
+}
+
+func TestJoins(t *testing.T) {
+	statements, err := Parse(`
+		SELECT 
+			u.name,
+			u.email,
+			g.name AS group
+		FROM users u
+		LEFT JOIN user_groups ug ON ug.user_id = u.id
+		LEFT JOIN groups g ON g.id = ug.group_id`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	selectStmt, ok := statements[0].(Select)
+	require.True(t, ok)
+	require.Len(t, selectStmt.Fields, 3)
+
+	field := selectStmt.Fields[0]
+	col, ok := field.Expr.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "name", col.ColumnName)
+	require.Equal(t, "u", col.TableName)
+	require.Equal(t, "", field.Alias)
+
+	field = selectStmt.Fields[1]
+	col, ok = field.Expr.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "email", col.ColumnName)
+	require.Equal(t, "u", col.TableName)
+	require.Equal(t, "", field.Alias)
+
+	field = selectStmt.Fields[2]
+	col, ok = field.Expr.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "name", col.ColumnName)
+	require.Equal(t, "g", col.TableName)
+	require.Equal(t, "group", field.Alias)
+
+	target := selectStmt.From
+	require.Equal(t, "u", target.Alias)
+	require.Nil(t, target.Subselect)
+	require.Equal(t, "users", target.TableName)
+
+	require.Len(t, selectStmt.Joins, 2)
+
+	join := selectStmt.Joins[0]
+	require.Equal(t, JoinTypeLeftOuter, join.Type)
+	require.Equal(t, "user_groups", join.Target.TableName)
+	require.Equal(t, "ug", join.Target.Alias)
+	require.Nil(t, join.Target.Subselect)
+
+	on, ok := join.On.(BinaryCondition)
+	require.True(t, ok)
+	require.Equal(t, BinaryCondOpEqual, on.Op)
+	left, ok := on.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "ug", left.TableName)
+	require.Equal(t, "user_id", left.ColumnName)
+	right, ok := on.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "u", right.TableName)
+	require.Equal(t, "uid", right.ColumnName)
+
+	join = selectStmt.Joins[1]
+	require.Equal(t, JoinTypeLeftOuter, join.Type)
+	require.Equal(t, "groups", join.Target.TableName)
+	require.Equal(t, "g", join.Target.Alias)
+	require.Nil(t, join.Target.Subselect)
+
+	on, ok = join.On.(BinaryCondition)
+	require.True(t, ok)
+	require.Equal(t, BinaryCondOpEqual, on.Op)
+	left, ok = on.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "g", left.TableName)
+	require.Equal(t, "id", left.ColumnName)
+	right, ok = on.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "ug", right.TableName)
+	require.Equal(t, "group_id", right.ColumnName)
 }
