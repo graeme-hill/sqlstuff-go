@@ -397,10 +397,22 @@ func (p *parser) scanSelect() (Select, error) {
 		return Select{}, err
 	}
 
+	where, err := p.scanWhere()
+	if err != nil {
+		return Select{}, err
+	}
+
+	having, err := p.scanHaving()
+	if err != nil {
+		return Select{}, err
+	}
+
 	return Select{
 		Fields: fields,
 		From:   target,
 		Joins:  joins,
+		Where:  where,
+		Having: having,
 	}, nil
 }
 
@@ -452,6 +464,30 @@ func (p *parser) scanFieldList() ([]Field, error) {
 		}
 	}
 	return fields, nil
+}
+
+func (p *parser) scanWhere() (Condition, error) {
+	if p.checkWord("WHERE") {
+		cond, err := p.scanCondition()
+		if err != nil {
+			return NullCondition{}, err
+		}
+		return cond, nil
+	}
+
+	return NullCondition{}, nil
+}
+
+func (p *parser) scanHaving() (Condition, error) {
+	if p.checkWord("HAVING") {
+		cond, err := p.scanCondition()
+		if err != nil {
+			return NullCondition{}, err
+		}
+		return cond, nil
+	}
+
+	return NullCondition{}, nil
 }
 
 func (p *parser) scanJoins() ([]Join, error) {
@@ -764,7 +800,6 @@ func (p *parser) scanExpr() (Expression, error) {
 		left = binaryExprTreeAppend(left, right, opType)
 	}
 
-	// not compelte!
 	return left, nil
 }
 
@@ -775,6 +810,20 @@ func (p *parser) scanSubExpr() (Expression, error) {
 	}
 	if done {
 		return ColumnExpression{}, errors.New("Expecting expression but found EOF")
+	}
+
+	// Number literals
+	if tok.tokType == tokenTypeNumber {
+		return NumberLiteral{
+			Value: string(tok.value),
+		}, nil
+	}
+
+	// String literals
+	if tok.tokType == tokenTypeString {
+		return StringLiteral{
+			Value: string(tok.value),
+		}, nil
 	}
 
 	// Unary expressions

@@ -4,6 +4,7 @@ type tokenType int
 
 const (
 	tokenTypeWord tokenType = iota
+	tokenTypeNumber
 	tokenTypeLParen
 	tokenTypeRParen
 	tokenTypeString

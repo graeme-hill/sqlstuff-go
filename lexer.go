@@ -86,6 +86,8 @@ func (l *lexer) next() (bool, error) {
 	more := true
 
 	switch ch {
+	case '=':
+		l.emit(token{tokType: tokenTypeEqual, location: chInfo.location})
 	case '<':
 		{
 			ahead, ok := l.peek(1)
@@ -110,7 +112,14 @@ func (l *lexer) next() (bool, error) {
 			}
 		}
 	case '.':
-		l.emit(token{tokType: tokenTypeDot, location: chInfo.location})
+		{
+			ahead, ok := l.peek(1)
+			if ok && isDigit(ahead.ch) && l.isFirstCharOfToken() {
+				more, err = l.scanNumber(ch)
+			} else {
+				l.emit(token{tokType: tokenTypeDot, location: chInfo.location})
+			}
+		}
 	case ',':
 		l.emit(token{tokType: tokenTypeComma, location: chInfo.location})
 	case ';':
@@ -140,10 +149,57 @@ func (l *lexer) next() (bool, error) {
 	case '"':
 		more, err = l.wrapped('"', tokenTypeWord)
 	default:
-		// keep going with this word
+		// keep going with this word unless starting a number, then do some
+		// different stuff because that's different
+		if isDigit(ch) {
+			more, err = l.scanNumber(ch)
+		}
 	}
 
 	return more, err
+}
+
+func (l *lexer) isFirstCharOfToken() bool {
+	return l.currentCharIndex < l.tokenStartIndex
+}
+
+func (l *lexer) scanNumber(first rune) (bool, error) {
+	hasDecimal := first == '.'
+
+	for {
+		next, done := l.advance()
+		if done {
+			break
+		}
+
+		isDecimal := next.ch == '.'
+		if isDecimal && hasDecimal {
+			return false, fmt.Errorf("Cannot have multiple decimals in one number")
+		}
+		hasDecimal = hasDecimal || isDecimal
+
+		if !isDecimal && !isDigit(next.ch) {
+			break
+		}
+	}
+
+	substr := l.sql[l.tokenStartIndex : l.currentCharIndex-1]
+	l.emitCallback(token{tokType: tokenTypeNumber, value: substr, location: l.tokenLocation})
+	l.resetToken()
+	return true, nil
+}
+
+func isDigit(ch rune) bool {
+	return ch == '0' ||
+		ch == '1' ||
+		ch == '2' ||
+		ch == '3' ||
+		ch == '4' ||
+		ch == '5' ||
+		ch == '6' ||
+		ch == '7' ||
+		ch == '8' ||
+		ch == '9'
 }
 
 func (l *lexer) eatWhitespace() {
@@ -151,7 +207,7 @@ func (l *lexer) eatWhitespace() {
 }
 
 func (l *lexer) endWord() {
-	if l.currentCharIndex > l.tokenStartIndex+1 {
+	if !l.isFirstCharOfToken() {
 		substr := l.sql[l.tokenStartIndex : l.currentCharIndex-1]
 		l.emitCallback(token{tokType: tokenTypeWord, value: substr, location: l.tokenLocation})
 	}

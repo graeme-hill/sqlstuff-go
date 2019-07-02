@@ -128,7 +128,7 @@ func TestAddColumn(t *testing.T) {
 	require.Equal(t, 200, addColumn.Column.Param1)
 }
 
-func TestJoins(t *testing.T) {
+func TestSelectFeatures(t *testing.T) {
 	statements, err := Parse(`
 		SELECT 
 			u.name,
@@ -136,7 +136,8 @@ func TestJoins(t *testing.T) {
 			g.name AS group
 		FROM users u
 		LEFT JOIN user_groups ug ON ug.user_id = u.id
-		LEFT JOIN groups g ON g.id = ug.group_id`)
+		LEFT JOIN groups g ON g.id = ug.group_id
+		WHERE u.id = 77`)
 	require.NoError(t, err)
 	require.Len(t, statements, 1)
 
@@ -185,10 +186,10 @@ func TestJoins(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "ug", left.TableName)
 	require.Equal(t, "user_id", left.ColumnName)
-	right, ok := on.Left.(ColumnExpression)
+	right, ok := on.Right.(ColumnExpression)
 	require.True(t, ok)
 	require.Equal(t, "u", right.TableName)
-	require.Equal(t, "uid", right.ColumnName)
+	require.Equal(t, "id", right.ColumnName)
 
 	join = selectStmt.Joins[1]
 	require.Equal(t, JoinTypeLeftOuter, join.Type)
@@ -203,8 +204,20 @@ func TestJoins(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "g", left.TableName)
 	require.Equal(t, "id", left.ColumnName)
-	right, ok = on.Left.(ColumnExpression)
+	right, ok = on.Right.(ColumnExpression)
 	require.True(t, ok)
 	require.Equal(t, "ug", right.TableName)
 	require.Equal(t, "group_id", right.ColumnName)
+
+	where, ok := selectStmt.Where.(BinaryCondition)
+	require.True(t, ok)
+
+	leftWhere, ok := where.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "id", leftWhere.ColumnName)
+	require.Equal(t, "u", leftWhere.TableName)
+
+	rightWhere, ok := where.Right.(NumberLiteral)
+	require.True(t, ok)
+	require.Equal(t, "77", rightWhere.Value)
 }

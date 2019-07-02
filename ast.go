@@ -86,17 +86,17 @@ const (
 	BinaryExprOpDivide
 )
 
-type unaryExprOpType int
-
-const (
-	UnaryExprOpNegative unaryExprOpType = iota
-)
-
 type logicalOpType int
 
 const (
 	LogicalOpAnd logicalOpType = iota
 	LogicalOpOr
+)
+
+type unaryExprOpType int
+
+const (
+	UnaryExprOpNegative unaryExprOpType = iota
 )
 
 type Statement interface {
@@ -166,6 +166,7 @@ type Condition interface {
 
 func (b BinaryCondition) isCondition()  {}
 func (l LogicalCondition) isCondition() {}
+func (l NullCondition) isCondition()    {}
 
 type BinaryCondition struct {
 	Left  Expression
@@ -178,6 +179,8 @@ type LogicalCondition struct {
 	Right Condition
 	Op    logicalOpType
 }
+
+type NullCondition struct{}
 
 type OrderExpr struct {
 	desc bool
