@@ -5,10 +5,18 @@ import (
 	"fmt"
 )
 
+func getShape(stmt Statement, model Model) ([]ColumnDefinition, error) {
+	switch typed := stmt.(type) {
+	case Select:
+		return getSelectShape(typed, model)
+	default:
+		return nil, errors.New("getShape not implemented for this type of statement yet")
+	}
+}
+
 // Returns the data types and names of the columns that will come out of the
 // given query/model pair.
-func getShape(query Select, model Model) ([]ColumnDefinition, error) {
-
+func getSelectShape(query Select, model Model) ([]ColumnDefinition, error) {
 	available, err := getAvailableColumns(query, model)
 	if err != nil {
 		return nil, err
