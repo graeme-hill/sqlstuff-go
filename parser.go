@@ -231,7 +231,7 @@ func (p *parser) scanColumnDef() (ColumnDefinition, bool, error) {
 func (p *parser) applyTypeParams(def *ColumnDefinition) error {
 	_, hasParams := p.checkToken(tokenTypeLParen)
 	if hasParams {
-		tok, err := p.requireToken(tokenTypeWord)
+		tok, err := p.requireToken(tokenTypeNumber)
 		if err != nil {
 			return err
 		}
@@ -243,7 +243,7 @@ func (p *parser) applyTypeParams(def *ColumnDefinition) error {
 
 		_, comma := p.checkToken(tokenTypeComma)
 		if comma {
-			tok, err = p.requireToken(tokenTypeWord)
+			tok, err = p.requireToken(tokenTypeNumber)
 			if err != nil {
 				return err
 			}

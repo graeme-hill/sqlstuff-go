@@ -160,15 +160,18 @@ func (l *lexer) next() (bool, error) {
 }
 
 func (l *lexer) isFirstCharOfToken() bool {
-	return l.currentCharIndex < l.tokenStartIndex
+	return l.currentCharIndex-1 == l.tokenStartIndex
 }
 
 func (l *lexer) scanNumber(first rune) (bool, error) {
 	hasDecimal := first == '.'
+	end := l.currentCharIndex
 
 	for {
-		next, done := l.advance()
-		if done {
+		next, ok := l.peek(0)
+		if !ok {
+			_, _ = l.advance()
+			end = l.currentCharIndex
 			break
 		}
 
@@ -179,11 +182,15 @@ func (l *lexer) scanNumber(first rune) (bool, error) {
 		hasDecimal = hasDecimal || isDecimal
 
 		if !isDecimal && !isDigit(next.ch) {
+			end++
 			break
 		}
+
+		_, _ = l.advance()
+		end = l.currentCharIndex
 	}
 
-	substr := l.sql[l.tokenStartIndex : l.currentCharIndex-1]
+	substr := l.sql[l.tokenStartIndex : end-1]
 	l.emitCallback(token{tokType: tokenTypeNumber, value: substr, location: l.tokenLocation})
 	l.resetToken()
 	return true, nil
