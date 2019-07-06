@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 func getShape(stmt Statement, model Model) ([]ColumnDefinition, error) {
@@ -59,8 +60,21 @@ func exprAsColumnDefinition(
 	switch typed := expr.(type) {
 	case ColumnExpression:
 		return findColumn(typed.TableName, typed.ColumnName, available)
+	case FunctionExpression:
+		return getFuncReturnType(typed)
 	default:
 		return ColumnDefinition{}, errors.New("Expression type not implemented yet")
+	}
+}
+
+func getFuncReturnType(fnExpr FunctionExpression) (ColumnDefinition, error) {
+	switch strings.ToUpper(fnExpr.FuncName) {
+	case "COUNT":
+		return ColumnDefinition{
+			Type: DataTypeBigInt,
+		}, nil
+	default:
+		return ColumnDefinition{}, fmt.Errorf("Function '%s' not supported", fnExpr.FuncName)
 	}
 }
 

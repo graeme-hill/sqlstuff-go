@@ -5,39 +5,39 @@ import (
 	"path"
 )
 
-type Query struct {
+type QueryBatch struct {
 	SQL    string
 	AST    []Statement
 	Shapes [][]ColumnDefinition
 }
 
-func ReadQueriesFromDir(dir string, model Model) ([]Query, error) {
+func ReadQueriesFromDir(dir string, model Model) ([]QueryBatch, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	queries := []Query{}
+	batches := []QueryBatch{}
 
 	for _, file := range files {
 		filePath := path.Join(dir, file.Name())
-		q, err := ReadQueryFromFile(filePath, model)
+		b, err := ReadBatchFromFile(filePath, model)
 		if err != nil {
 			return nil, err
 		}
-		queries = append(queries, q)
+		batches = append(batches, b)
 	}
 
-	return queries, nil
+	return batches, nil
 }
 
-func ReadQueryFromFile(filePath string, model Model) (Query, error) {
+func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 	// Read text from file
 	bytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return Query{}, err
+		return QueryBatch{}, err
 	}
-	query := Query{
+	query := QueryBatch{
 		SQL:    string(bytes),
 		Shapes: [][]ColumnDefinition{},
 	}
@@ -45,7 +45,7 @@ func ReadQueryFromFile(filePath string, model Model) (Query, error) {
 	// Parse the file to get AST
 	statements, err := Parse(query.SQL)
 	if err != nil {
-		return Query{}, err
+		return QueryBatch{}, err
 	}
 	query.AST = statements
 
@@ -53,7 +53,7 @@ func ReadQueryFromFile(filePath string, model Model) (Query, error) {
 	for _, stmt := range statements {
 		defs, err := getShape(stmt, model)
 		if err != nil {
-			return Query{}, err
+			return QueryBatch{}, err
 		}
 		query.Shapes = append(query.Shapes, defs)
 	}

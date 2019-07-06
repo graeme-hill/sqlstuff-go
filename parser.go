@@ -887,6 +887,11 @@ func (p *parser) scanColumnOrCall(firstToken token) (Expression, error) {
 
 	// Function call
 	if secondToken.tokType == tokenTypeLParen {
+		_, _, err = p.reader.Next()
+		if err != nil {
+			return ColumnExpression{}, err
+		}
+
 		params, err := p.scanFunctionParams()
 		if err != nil {
 			return ColumnExpression{}, nil
