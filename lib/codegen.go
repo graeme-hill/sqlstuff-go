@@ -17,8 +17,35 @@ var templateString = `// This code was generate by a tool.
 package {{.Package}}
 
 import (
-	"database/sql"
+  "database/sql"
+  _ "github.com/lib/pq"
 )
+
+type DBClient interface {
+	{{- range .Batches}}
+	{{.FuncName}}() ({{range .Queries}}[]{{.Result.Name}}, {{end}}error)
+	{{end -}}
+	Close()
+}
+
+type SQLDBClient struct {
+	db *sql.DB
+}
+
+func NewDBClient(connectionString string) (DBClient, error) {
+	db, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		return SQLDBClient{}, err
+	}
+
+	return SQLDBClient{
+		db: db,
+	}, nil
+}
+
+func (client SQLDBClient) Close() {
+	client.db.Close()
+}
 
 {{range .Batches}}
 /******************************************************************************
@@ -33,9 +60,9 @@ type {{.Result.Name}} struct {
 }
 {{end}}
 
-func {{.FuncName}}() ({{range .Queries}}r{{.Index}} {{.Result.Name}}, {{end}}err error) {
+func (client SQLDBClient) {{.FuncName}}() ({{range .Queries}}r{{.Index}} []{{.Result.Name}}, {{end}}err error) {
 	sql := "{{.SQL}}"
-	rows, err := db.Query(sql)
+	rows, err := client.db.Query(sql)
 	if err != nil {
 		return 
 	}
@@ -59,11 +86,12 @@ func {{.FuncName}}() ({{range .Queries}}r{{.Index}} {{.Result.Name}}, {{end}}err
 		if err != nil {
 			return
 		}
-		r{{.Index}} = {{.Result.Name}}{
+
+		r{{.Index}} = append(r{{.Index}}, {{.Result.Name}}{
 			{{range .Result.Columns -}}
 			{{.Name}}: {{.NameLower}},
 			{{end}}
-		}
+		})
 	}
 	{{- end}}
 }
