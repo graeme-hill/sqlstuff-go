@@ -7,28 +7,65 @@ import (
 	"strings"
 	"io"
 	"text/template"
-	"os"
+	"bytes"
+	"go/format"
+	"io/ioutil"
 )
 
 var templateString = `// This code was generate by a tool.
 
 package {{.Package}}
 
+import (
+	"database/sql"
+)
+
 {{range .Batches}}
 /******************************************************************************
  * {{.Name}}
  ****************************************************************************/
 
-{{range .ResultTypes}}
-type {{.Name}} struct {
-  {{range .Columns}}
-  {{.Name}} {{.Type}}
-  {{end}}
+{{range .Queries}}
+type {{.Result.Name}} struct {
+  {{range .Result.Columns -}}
+	{{.Name}} {{.Type}}
+	{{end}}
 }
 {{end}}
 
-func {{.FuncName}}() ({{range .ResultTypes}}{{.Name}}, {{end}}error) {
-  // to do...
+func {{.FuncName}}() ({{range .Queries}}r{{.Index}} {{.Result.Name}}, {{end}}err error) {
+	sql := "{{.SQL}}"
+	rows, err := db.Query(sql)
+	if err != nil {
+		return 
+	}
+	defer rows.Close()
+
+	{{range .Queries}}
+	{{if (gt .Index 1)}}
+	if !rows.NextResultSet() {
+		err = fmt.Errorf("Expecting more result sets: %v", rows.Err())
+		return
+	}
+	{{end}}
+
+	for rows.Next() {
+		var (
+			{{range .Result.Columns -}}
+			{{.NameLower}} {{.Type}}
+			{{end}}
+		)
+		err = rows.Scan({{range .Result.Columns}}{{if (gt .Index 1)}}, {{end}}&{{.NameLower}}{{end}})
+		if err != nil {
+			return
+		}
+		r{{.Index}} = {{.Result.Name}}{
+			{{range .Result.Columns -}}
+			{{.Name}}: {{.NameLower}},
+			{{end}}
+		}
+	}
+	{{- end}}
 }
 {{end}}
 `
@@ -43,8 +80,9 @@ type codeGenViewModel struct {
 
 type batchViewModel struct {
 	Name        string
-	ResultTypes []resultTypeViewModel
+	Queries []queryViewModel
 	FuncName    string
+	SQL string
 }
 
 type resultTypeViewModel struct {
@@ -54,7 +92,14 @@ type resultTypeViewModel struct {
 
 type columnViewModel struct {
 	Name string
+	NameLower string
 	Type string
+	Index int
+}
+
+type queryViewModel struct {
+	Result resultTypeViewModel
+	Index int
 }
 
 func Generate(migrationDir string, queryDir string, dest string, pkg string) error {
@@ -73,12 +118,19 @@ func Generate(migrationDir string, queryDir string, dest string, pkg string) err
 		return err
 	}
 
-	fileWriter, err := os.Create(dest)
+	buf := bytes.Buffer{}
+	err = writeCode(&buf, pkg, batches)
 	if err != nil {
 		return err
 	}
 
-	err = writeCode(fileWriter, pkg, batches)
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		formatted = buf.Bytes()
+		fmt.Printf("gofmt failed: %v", err)
+	}
+
+	err = ioutil.WriteFile(dest, formatted, 0644)
 	if err != nil {
 		return err
 	}
@@ -108,7 +160,7 @@ func newViewModel(pkg string, batches []QueryBatch) (codeGenViewModel, error) {
 	}
 
 	for _, qb := range batches {
-		resultTypes := []resultTypeViewModel{}
+		queries := []queryViewModel{}
 
 		for i, shape := range qb.Shapes {
 			rvm, err := newResultTypeViewModel(i, len(qb.Shapes), qb.Name, shape)
@@ -116,13 +168,17 @@ func newViewModel(pkg string, batches []QueryBatch) (codeGenViewModel, error) {
 				return codeGenViewModel{}, err
 			}
 
-			resultTypes = append(resultTypes, rvm)
+			queries = append(queries, queryViewModel{
+				Result: rvm,
+				Index: i+1,
+			})
 		}
 
 		vm.Batches = append(vm.Batches, batchViewModel{
 			Name:        qb.Name,
 			FuncName:    pascalCase(qb.Name),
-			ResultTypes: resultTypes,
+			Queries: queries,
+			SQL: formatSQLForGo(qb.SQL),
 		})
 	}
 
@@ -132,7 +188,7 @@ func newViewModel(pkg string, batches []QueryBatch) (codeGenViewModel, error) {
 func newResultTypeViewModel(index int, of int, batchName string, shape []ColumnDefinition) (resultTypeViewModel, error) {
 	columns := []columnViewModel{}
 
-	for _, c := range shape {
+	for i, c := range shape {
 		typ, err := goType(c)
 		if err != nil {
 			return resultTypeViewModel{}, err
@@ -140,7 +196,9 @@ func newResultTypeViewModel(index int, of int, batchName string, shape []ColumnD
 
 		columns = append(columns, columnViewModel{
 			Name: pascalCase(c.Name),
+			NameLower: camelCase(c.Name),
 			Type: typ,
+			Index: i+1,
 		})
 	}
 
@@ -170,6 +228,10 @@ func goType(def ColumnDefinition) (string, error) {
 	default:
 		return "", fmt.Errorf("Unsupported type %v", def.Type)
 	}
+}
+
+func formatSQLForGo(sql string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(sql, "\"", "\"\""), "\n", "\\n")
 }
 
 func addWordBoundariesToNumbers(s string) string {
