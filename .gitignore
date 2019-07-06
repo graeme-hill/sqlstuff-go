@@ -1,1 +1,1 @@
-generated/
+test/generated/*.go
