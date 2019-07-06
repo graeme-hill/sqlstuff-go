@@ -1,4 +1,4 @@
-package main
+package lib
 
 import (
 	"testing"
@@ -19,6 +19,7 @@ func TestGetShapeAdvanced(t *testing.T) {
 	batch := batches[0]
 	require.Len(t, batch.AST, 1)
 	require.Len(t, batch.Shapes, 1)
+	require.Equal(t, "get_users", batch.Name)
 
 	columns := batch.Shapes[0]
 	require.Len(t, columns, 5)

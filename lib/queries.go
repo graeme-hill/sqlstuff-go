@@ -1,11 +1,13 @@
-package main
+package lib
 
 import (
 	"io/ioutil"
 	"path"
+	"strings"
 )
 
 type QueryBatch struct {
+	Name   string
 	SQL    string
 	AST    []Statement
 	Shapes [][]ColumnDefinition
@@ -38,6 +40,7 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 		return QueryBatch{}, err
 	}
 	query := QueryBatch{
+		Name:   batchNameFromPath(filePath),
 		SQL:    string(bytes),
 		Shapes: [][]ColumnDefinition{},
 	}
@@ -59,4 +62,10 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 	}
 
 	return query, nil
+}
+
+func batchNameFromPath(filePath string) string {
+	_, fileName := path.Split(filePath)
+	parts := strings.Split(fileName, ".")
+	return parts[0]
 }

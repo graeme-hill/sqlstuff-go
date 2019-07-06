@@ -1,4 +1,4 @@
-module github.com/graeme-hill/sqlbuddy
+module github.com/graeme-hill/sqlstuff-go
 
 go 1.12
 
