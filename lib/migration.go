@@ -5,6 +5,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"database/sql"
+	_ "github.com/lib/pq"
 )
 
 type Migration struct {
@@ -75,4 +77,40 @@ func getMigrationName(fileName string) string {
 
 func getUpness(fileName string) bool {
 	return !strings.HasSuffix(fileName, ".down.sql")
+}
+
+func RunMigrations(dir string, connectionString string) error {
+	migrations, err := ReadMigrationsDir(dir)
+	if err != nil {
+		return err
+	}
+
+	db, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	err = requireMigrationsTable()
+	if err != nil {
+		return err
+	}
+
+	for _, migration := range migrations {
+		err = execMigration(migration)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func requireMigrationsTable(db *sql.DB) error {
+	sql := "CREATE TABLE IS NOT EXISTS migrations (version INT PRIMARY KEY, at TIMESTAMP WITH TIME ZONE)"
+	// TO DO...
+}
+
+func execMigration(db *sql.DB, migration Migration) error {
+	// TO DO...
 }

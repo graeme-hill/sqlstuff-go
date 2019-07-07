@@ -8,8 +8,7 @@ import (
 )
 
 type DBClient interface {
-	GetCounts() ([]GetCountsResult1, []GetCountsResult2, error)
-	GetUsers() ([]GetUsersResult1, []GetUsersResult2, error)
+	GetUsers() ([]GetUsersResult, error)
 	Close()
 }
 
@@ -33,66 +32,10 @@ func (client SQLDBClient) Close() {
 }
 
 /******************************************************************************
- * get_counts
- ****************************************************************************/
-
-type GetCountsResult1 struct {
-	UserCount int64
-}
-
-type GetCountsResult2 struct {
-	GroupCount int64
-}
-
-func (client SQLDBClient) GetCounts() (r1 []GetCountsResult1, r2 []GetCountsResult2, err error) {
-	sql := "SELECT COUNT(id) as user_count FROM groups;\n\nSELECT COUNT(id) as group_count FROM groups;"
-	rows, err := client.db.Query(sql)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			userCount int64
-		)
-		err = rows.Scan(&userCount)
-		if err != nil {
-			return
-		}
-
-		r1 = append(r1, GetCountsResult1{
-			UserCount: userCount,
-		})
-	}
-
-	if !rows.NextResultSet() {
-		err = fmt.Errorf("Expecting more result sets: %v", rows.Err())
-		return
-	}
-
-	for rows.Next() {
-		var (
-			groupCount int64
-		)
-		err = rows.Scan(&groupCount)
-		if err != nil {
-			return
-		}
-
-		r2 = append(r2, GetCountsResult2{
-			GroupCount: groupCount,
-		})
-	}
-
-	return
-}
-
-/******************************************************************************
  * get_users
  ****************************************************************************/
 
-type GetUsersResult1 struct {
+type GetUsersResult struct {
 	Id        int32
 	Email     string
 	FirstName string
@@ -100,12 +43,8 @@ type GetUsersResult1 struct {
 	GroupName string
 }
 
-type GetUsersResult2 struct {
-	Name string
-}
-
-func (client SQLDBClient) GetUsers() (r1 []GetUsersResult1, r2 []GetUsersResult2, err error) {
-	sql := "SELECT\n  u.id, u.email, u.first_name, u.last_name, g.name AS group_name\nFROM\n  users u\nLEFT JOIN user_groups ug ON u.id = ug.user_id\nLEFT JOIN groups g ON g.id = ug.group_id;\n\nSELECT name FROM groups;"
+func (client SQLDBClient) GetUsers() (r1 []GetUsersResult, err error) {
+	sql := "SELECT\n  u.id, u.email, u.first_name, u.last_name, g.name AS group_name\nFROM\n  users u\nLEFT JOIN user_groups ug ON u.id = ug.user_id\nLEFT JOIN groups g ON g.id = ug.group_id;"
 	rows, err := client.db.Query(sql)
 	if err != nil {
 		return
@@ -125,31 +64,12 @@ func (client SQLDBClient) GetUsers() (r1 []GetUsersResult1, r2 []GetUsersResult2
 			return
 		}
 
-		r1 = append(r1, GetUsersResult1{
+		r1 = append(r1, GetUsersResult{
 			Id:        id,
 			Email:     email,
 			FirstName: firstName,
 			LastName:  lastName,
 			GroupName: groupName,
-		})
-	}
-
-	if !rows.NextResultSet() {
-		err = fmt.Errorf("Expecting more result sets: %v", rows.Err())
-		return
-	}
-
-	for rows.Next() {
-		var (
-			name string
-		)
-		err = rows.Scan(&name)
-		if err != nil {
-			return
-		}
-
-		r2 = append(r2, GetUsersResult2{
-			Name: name,
 		})
 	}
 
