@@ -1,13 +1,14 @@
 package lib
 
 import (
+	"context"
+	"database/sql"
 	"io/ioutil"
+	"log"
 	"path"
 	"sort"
 	"strings"
-	"database/sql"
-	"log"
-	"context"
+
 	_ "github.com/lib/pq"
 )
 
@@ -119,7 +120,7 @@ func RunMigrations(ctx context.Context, dir string, connectionString string) err
 }
 
 func requireMigrationsTable(ctx context.Context, db *sql.DB) error {
-	q := "CREATE TABLE IS NOT EXISTS migrations (key VARCHAR(200) PRIMARY KEY, at TIMESTAMP WITH TIME ZONE)"
+	q := "CREATE TABLE IF NOT EXISTS migrations (key VARCHAR(200) PRIMARY KEY, at TIMESTAMP WITH TIME ZONE)"
 	_, err := db.ExecContext(ctx, q)
 	if err != nil {
 		return err
