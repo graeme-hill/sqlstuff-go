@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"database/sql"
+	"log"
+	"context"
 	_ "github.com/lib/pq"
 )
 
@@ -79,7 +81,7 @@ func getUpness(fileName string) bool {
 	return !strings.HasSuffix(fileName, ".down.sql")
 }
 
-func RunMigrations(dir string, connectionString string) error {
+func RunMigrations(ctx context.Context, dir string, connectionString string) error {
 	migrations, err := ReadMigrationsDir(dir)
 	if err != nil {
 		return err
@@ -91,13 +93,23 @@ func RunMigrations(dir string, connectionString string) error {
 	}
 	defer db.Close()
 
-	err = requireMigrationsTable()
+	err = requireMigrationsTable(ctx, db)
 	if err != nil {
 		return err
 	}
 
 	for _, migration := range migrations {
-		err = execMigration(migration)
+		// Avoid running the same migration twice
+		alreadyRun, err := hasMigrationRun(ctx, db, migration)
+		if err != nil {
+			return err
+		}
+		if alreadyRun {
+			continue
+		}
+
+		// Actually run migration
+		err = execMigration(ctx, db, migration)
 		if err != nil {
 			return err
 		}
@@ -106,11 +118,58 @@ func RunMigrations(dir string, connectionString string) error {
 	return nil
 }
 
-func requireMigrationsTable(db *sql.DB) error {
-	sql := "CREATE TABLE IS NOT EXISTS migrations (version INT PRIMARY KEY, at TIMESTAMP WITH TIME ZONE)"
-	// TO DO...
+func requireMigrationsTable(ctx context.Context, db *sql.DB) error {
+	q := "CREATE TABLE IS NOT EXISTS migrations (key VARCHAR(200) PRIMARY KEY, at TIMESTAMP WITH TIME ZONE)"
+	_, err := db.ExecContext(ctx, q)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func execMigration(db *sql.DB, migration Migration) error {
-	// TO DO...
+func execMigration(ctx context.Context, db *sql.DB, migration *Migration) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelDefault})
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, migration.UpSQL)
+	if err != nil {
+		rollbackErr := tx.Rollback()
+		if rollbackErr != nil {
+			log.Printf("Rollback failed on migration error. Rollback error: %v", rollbackErr)
+		}
+		return err
+	}
+
+	insertSQL := "INSERT INTO migrations (key, at) VALUES ($1, CURRENT_TIMESTAMP)"
+	_, err = tx.ExecContext(ctx, insertSQL, migration.Name)
+	if err != nil {
+		rollbackErr := tx.Rollback()
+		if rollbackErr != nil {
+			log.Printf("Rollback failed on migration error. Rollback error: %v", rollbackErr)
+		}
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func hasMigrationRun(ctx context.Context, db *sql.DB, migration *Migration) (bool, error) {
+	q := "SELECT 1 FROM migrations WHERE key=$1"
+	row := db.QueryRowContext(ctx, q, migration.Name)
+	result := 0
+	err := row.Scan(&result)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

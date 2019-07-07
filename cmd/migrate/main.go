@@ -1,9 +1,13 @@
 package main
 
-import "github.com/graeme-hill/sqlstuff-go/lib"
+import (
+	"github.com/graeme-hill/sqlstuff-go/lib"
+	"context"
+)
 
 func main() {
-	err := lib.RunMigrations("./test/migrations", "dbname=graeme")
+	ctx := context.Background()
+	err := lib.RunMigrations(ctx, "./test/migrations", "dbname=graeme")
 	if err != nil {
 		panic(err)
 	}
