@@ -7,12 +7,12 @@ import (
 )
 
 func TestGetShapeAdvanced(t *testing.T) {
-	migrations, err := ReadMigrationsDir("./test/migrations")
+	migrations, err := ReadMigrationsDir("../test/migrations")
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)
 	require.NoError(t, err)
 
-	batches, err := ReadQueriesFromDir("./test/queries", model)
+	batches, err := ReadQueriesFromDir("../test/queries", model)
 	require.NoError(t, err)
 	require.Len(t, batches, 1)
 
@@ -28,7 +28,7 @@ func TestGetShapeAdvanced(t *testing.T) {
 	require.Equal(t, "email", columns[1].Name)
 	require.Equal(t, "first_name", columns[2].Name)
 	require.Equal(t, "last_name", columns[3].Name)
-	require.Equal(t, "group_count", columns[4].Name)
+	require.Equal(t, "group_name", columns[4].Name)
 
 	require.Equal(t, DataTypeInteger, columns[0].Type)
 	require.Equal(t, DataTypeVarChar, columns[1].Type)
@@ -37,5 +37,6 @@ func TestGetShapeAdvanced(t *testing.T) {
 	require.Equal(t, 200, columns[2].Param1)
 	require.Equal(t, DataTypeVarChar, columns[3].Type)
 	require.Equal(t, 200, columns[3].Param1)
-	require.Equal(t, DataTypeBigInt, columns[4].Type)
+	require.Equal(t, DataTypeVarChar, columns[4].Type)
+	require.Equal(t, 200, columns[4].Param1)
 }

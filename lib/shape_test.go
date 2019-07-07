@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetShapeBasic(t *testing.T) {
-	migrations, err := ReadMigrationsDir("./test/migrations")
+	migrations, err := ReadMigrationsDir("../test/migrations")
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)
 	require.NoError(t, err)
