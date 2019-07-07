@@ -5,17 +5,17 @@ import (
 	"testing"
 
 	"github.com/graeme-hill/sqlstuff-go/lib"
-	"github.com/graeme-hill/sqlstuff-go/test/store"
+	"github.com/graeme-hill/sqlstuff-go/test/basic/store"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAll(t *testing.T) {
+func TestBasic(t *testing.T) {
 	connStr := "user=postgres password=password"
 	client, err := store.NewDBClient(connStr)
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	err = lib.RunMigrations(ctx, "./migrations", connStr)
+	err = lib.RunMigrations(ctx, "./basic/migrations", connStr)
 	require.NoError(t, err)
 
 	users, err := client.GetUsers()

@@ -7,12 +7,12 @@ import (
 )
 
 func TestGetShapeAdvanced(t *testing.T) {
-	migrations, err := ReadMigrationsDir("../test/migrations")
+	migrations, err := ReadMigrationsDir("../test/basic/migrations")
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)
 	require.NoError(t, err)
 
-	batches, err := ReadQueriesFromDir("../test/queries", model)
+	batches, err := ReadQueriesFromDir("../test/basic/queries", model)
 	require.NoError(t, err)
 	require.Len(t, batches, 1)
 

@@ -8,7 +8,7 @@ import (
 )
 
 func TestMigrations(t *testing.T) {
-	migrations, err := ReadMigrationsDir("../test/migrations")
+	migrations, err := ReadMigrationsDir("../test/basic/migrations")
 	require.NoError(t, err)
 	require.Len(t, migrations, 2)
 	require.True(t, strings.HasPrefix(migrations[0].UpSQL, "CREATE TABLE"))
