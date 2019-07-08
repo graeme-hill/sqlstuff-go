@@ -1,0 +1,1 @@
+SELECT "key", "name", created, modified FROM projects WHERE tid = $tid

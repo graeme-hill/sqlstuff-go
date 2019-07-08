@@ -1,0 +1,1 @@
+SELECT "key", "name", created, modified FROM tags WHERE tid = $tid

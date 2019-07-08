@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMigrations(t *testing.T) {
+func TestBasicMigrations(t *testing.T) {
 	migrations, err := ReadMigrationsDir("../test/basic/migrations")
 	require.NoError(t, err)
 	require.Len(t, migrations, 2)
@@ -66,4 +66,14 @@ func TestMigrations(t *testing.T) {
 
 	require.False(t, model.Tables["user_groups"].Columns[0].Nullable)
 	require.False(t, model.Tables["user_groups"].Columns[1].Nullable)
+}
+
+func TestBugTrackerMigrations(t *testing.T) {
+	migrations, err := ReadMigrationsDir("../test/bugtracker/migrations")
+	require.NoError(t, err)
+
+	model, err := ModelFromMigrations(migrations)
+	require.NoError(t, err)
+
+	require.Len(t, model.Tables, 7)
 }

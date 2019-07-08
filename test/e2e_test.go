@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/graeme-hill/sqlstuff-go/lib"
-	"github.com/graeme-hill/sqlstuff-go/test/basic/store"
+	basic "github.com/graeme-hill/sqlstuff-go/test/basic/store"
+	bugtracker "github.com/graeme-hill/sqlstuff-go/test/bugtracker/store"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBasic(t *testing.T) {
 	connStr := "user=postgres password=password"
-	client, err := store.NewDBClient(connStr)
+	client, err := basic.NewDBClient(connStr)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -28,4 +29,17 @@ func TestBasic(t *testing.T) {
 
 	require.Equal(t, "Graeme", users[1].FirstName)
 	require.Equal(t, "Hill", users[1].LastName)
+}
+
+func TestBugTracker(t *testing.T) {
+	connStr := "user=postgres password=password"
+	client, err := bugtracker.NewDBClient(connStr)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = lib.RunMigrations(ctx, "./basic/migrations", connStr)
+	require.NoError(t, err)
+
+	_, _, err = client.GetIssue(1, 2)
+	require.NoError(t, err)
 }
