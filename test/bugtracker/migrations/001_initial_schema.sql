@@ -1,6 +1,10 @@
 CREATE TABLE tenants (
   id UUID NOT NULL PRIMARY KEY,
-  "name" VARCHAR(100) NOT NULL
+  "key" VARCHAR(32) NOT NULL,
+  "name" VARCHAR(100) NOT NULL,
+  created TIMESTAMPTZ NOT NULL,
+  updated TIMESTAMPTZ NULL,
+  CONSTRAINT uq_tenant_key UNIQUE ("key")
 );
 
 CREATE TABLE issues (

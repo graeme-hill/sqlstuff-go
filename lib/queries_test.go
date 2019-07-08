@@ -49,5 +49,5 @@ func TestGetShapeBugTracker(t *testing.T) {
 
 	batches, err := ReadQueriesFromDir("../test/bugtracker/queries", model)
 	require.NoError(t, err)
-	require.Len(t, batches, 3)
+	require.Len(t, batches, 7)
 }
