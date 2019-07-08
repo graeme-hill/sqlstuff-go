@@ -7,4 +7,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	err = lib.Generate("./test/bugtracker/migrations", "./test/bugtracker/queries", "./test/bugtracker/store/queries.go", "store")
+	if err != nil {
+		panic(err)
+	}
 }
