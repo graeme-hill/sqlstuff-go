@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetShapeAdvanced(t *testing.T) {
+func TestGetShapeBasic(t *testing.T) {
 	migrations, err := ReadMigrationsDir("../test/basic/migrations")
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)
@@ -39,4 +39,15 @@ func TestGetShapeAdvanced(t *testing.T) {
 	require.Equal(t, 200, columns[3].Param1)
 	require.Equal(t, DataTypeVarChar, columns[4].Type)
 	require.Equal(t, 200, columns[4].Param1)
+}
+
+func TestGetShapeBugTracker(t *testing.T) {
+	migrations, err := ReadMigrationsDir("../test/bugtracker/migrations")
+	require.NoError(t, err)
+	model, err := ModelFromMigrations(migrations)
+	require.NoError(t, err)
+
+	batches, err := ReadQueriesFromDir("../test/bugtracker/queries", model)
+	require.NoError(t, err)
+	require.Len(t, batches, 3)
 }

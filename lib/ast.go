@@ -198,6 +198,11 @@ type Join struct {
 	On     Condition
 }
 
+type Limit struct {
+	Count int
+	HasLimit bool
+}
+
 type Select struct {
 	Fields  []Field
 	From    SelectTarget
@@ -205,6 +210,7 @@ type Select struct {
 	Where   Condition
 	Having  Condition
 	OrderBy []OrderExpr
+	Limit   Limit
 	Next    *NextSelect
 }
 

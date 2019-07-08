@@ -466,13 +466,47 @@ func (p *parser) scanSelect() (Select, error) {
 		return Select{}, err
 	}
 
+	limit, err := p.scanLimit()
+	if err != nil {
+		return Select{}, err
+	}
+
 	return Select{
 		Fields: fields,
 		From:   target,
 		Joins:  joins,
 		Where:  where,
 		Having: having,
+		Limit: limit,
 	}, nil
+}
+
+func (p *parser) scanLimit() (Limit, error) {
+	if !p.checkWord("LIMIT") {
+		return Limit{}, nil
+	}
+	
+	// We are in a LIMIT clause so expect a number or 'ALL'
+	next, done, err := p.reader.Next()
+	if err != nil {
+		return Limit{}, err
+	}
+	if done {
+		return Limit{}, errors.New("Expecting LIMIT value but got EOF")
+	}
+	if next.tokType == tokenTypeNumber {
+		i, err := strconv.Atoi(string(next.value))
+		if err != nil {
+			return Limit{}, fmt.Errorf("Cannot convert LIMIT %s to int", string(next.value))
+		}
+		return Limit{
+			HasLimit: true,
+			Count: i,
+		}, nil
+	} else if isKeyword(next, "ALL") {
+		return Limit{}, nil
+	}
+	return Limit{}, fmt.Errorf("Invalid LIMIT value <%s>", tokenString(next))
 }
 
 func (p *parser) scanFieldList() ([]Field, error) {

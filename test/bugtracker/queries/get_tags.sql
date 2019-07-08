@@ -1,1 +1,1 @@
-SELECT "key", "name", created, modified FROM tags WHERE tid = $tid
+SELECT "key", created FROM tags WHERE tid = $tid
