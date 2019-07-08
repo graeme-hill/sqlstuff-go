@@ -152,6 +152,8 @@ func (p *parser) scanAlterTable() (Statement, error) {
 // Reads after "CREATE TABLE"
 func (p *parser) scanCreateTable() (CreateTable, error) {
 
+	var more bool
+
 	// get table name
 	nameTok, err := p.requireToken(tokenTypeWord)
 	if err != nil {
@@ -180,6 +182,28 @@ func (p *parser) scanCreateTable() (CreateTable, error) {
 			break
 		}
 
+		// Skip PRIMARY KEY because we don't need that info
+		if p.checkWord("PRIMARY") {
+			more, err = p.skipColumnDef()
+			if err != nil {
+				return CreateTable{}, nil
+			}
+			if !more {
+				break
+			}
+		}
+
+		// Skip CONSTRAINT because we don't need that info
+		if p.checkWord("CONSTRAINT") {
+			more, err = p.skipColumnDef()
+			if err != nil {
+				return CreateTable{}, nil
+			}
+			if !more {
+				break
+			}
+		}
+
 		col, more, err := p.scanColumnDef()
 		if err != nil {
 			return CreateTable{}, err
@@ -192,6 +216,31 @@ func (p *parser) scanCreateTable() (CreateTable, error) {
 	}
 
 	return createTable, nil
+}
+
+func (p *parser) skipColumnDef() (more bool, err error) {
+	parenCount := 0
+	for {
+		next, done, err := p.reader.Next()
+		if done {
+			return false, errors.New("Unexpected EOF in CREATE TABLE")
+		}
+		if err != nil {
+			return false, err
+		}
+
+		if next.tokType == tokenTypeLParen {
+			parenCount++
+		} else if next.tokType == tokenTypeRParen {
+			if parenCount <= 0 {
+				return false, nil
+			} else {
+				parenCount--
+			}
+		} else if next.tokType == tokenTypeComma && parenCount <= 0 {
+			return true, nil
+		}
+	}
 }
 
 // Reads an expression like "first_name VARCHAR(200) NOT NULL"
@@ -323,7 +372,17 @@ func (p *parser) scanDataType() (dataType, error) {
 	if p.checkWord("VARCHAR") {
 		return DataTypeVarChar, nil
 	}
-	return 0, errors.New("Unknown data type")
+	if p.checkWord("UUID") {
+		return DataTypeUUID, nil
+	}
+	if p.checkWord("TIMESTAMPTZ") {
+		return DataTypeTimestampWithTimeZone, nil
+	}
+	if p.checkWord("JSONB") {
+		return DataTypeBinaryJSON, nil
+	}
+	next, _, _ := p.reader.Peek()
+	return 0, fmt.Errorf("Unknown data type <%s>", tokenString(next))
 }
 
 func (p *parser) requireToken(tokType tokenType) (token, error) {
