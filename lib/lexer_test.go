@@ -26,6 +26,16 @@ func requireTok(t *testing.T, actual token, typ tokenType, value string, line in
 	require.Equal(t, col, actual.location.col, "token col")
 }
 
+func TestParameters(t *testing.T) {
+	tokens, err := getTokens("select $foo_bar-1 from bar limit $limit")
+	require.NoError(t, err)
+
+	require.Len(t, tokens, 8)
+
+	requireTok(t, tokens[1], tokenTypeParameter, "foo_bar", 1, 8)
+	requireTok(t, tokens[7], tokenTypeParameter, "limit", 1, 34)
+}
+
 func TestLexerOneWord(t *testing.T) {
 	tokens, err := getTokens("select")
 	require.NoError(t, err)

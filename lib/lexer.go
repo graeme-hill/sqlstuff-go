@@ -1,7 +1,9 @@
 package lib
 
 import (
+	"errors"
 	"fmt"
+	"unicode"
 )
 
 type charInfo struct {
@@ -148,6 +150,8 @@ func (l *lexer) next() (bool, error) {
 		more, err = l.wrapped('\'', tokenTypeString)
 	case '"':
 		more, err = l.wrapped('"', tokenTypeWord)
+	case '$':
+		more, err = l.scanParameter()
 	default:
 		// keep going with this word unless starting a number, then do some
 		// different stuff because that's different
@@ -224,6 +228,36 @@ func (l *lexer) endWord() {
 func (l *lexer) resetToken() {
 	l.tokenLocation = l.currentLocation
 	l.tokenStartIndex = l.currentCharIndex
+}
+
+func isValidParameterChar(ch rune) bool {
+	return unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '_'
+}
+
+// scans forward from a $ token to the end of the parameter
+func (l *lexer) scanParameter() (bool, error) {
+	param := []rune{}
+	location := l.currentLocation
+	location.col--
+	first := true
+	more := false
+
+	for {
+		current, ok := l.peek(0)
+		more = ok
+		isParamChar := more && isValidParameterChar(current.ch)
+		if first && !isParamChar {
+			return false, errors.New("Expected parameter name after '$'")
+		} else if !isParamChar {
+			break
+		}
+		param = append(param, current.ch)
+		first = false
+		l.advance()
+	}
+	l.emitCallback(token{tokType: tokenTypeParameter, location: location, value: param})
+	l.resetToken()
+	return more, nil
 }
 
 func (l *lexer) wrapped(terminator rune, tokType tokenType) (bool, error) {
