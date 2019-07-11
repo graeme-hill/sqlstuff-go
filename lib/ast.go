@@ -101,6 +101,11 @@ const (
 
 type Program struct {
 	Statements []Statement
+	Parameters []Parameter
+}
+
+type Parameter struct {
+	Name string
 }
 
 type Statement interface {
@@ -117,13 +122,13 @@ type Expression interface {
 	isExpression()
 }
 
-func (p ParameterExpression) isExpression()          {}
-func (f FunctionExpression) isExpression() {}
-func (b BinaryExpression) isExpression()   {}
-func (b UnaryExpression) isExpression()    {}
-func (s StringLiteral) isExpression()      {}
-func (n NumberLiteral) isExpression()      {}
-func (c ColumnExpression) isExpression()   {}
+func (p ParameterExpression) isExpression() {}
+func (f FunctionExpression) isExpression()  {}
+func (b BinaryExpression) isExpression()    {}
+func (b UnaryExpression) isExpression()     {}
+func (s StringLiteral) isExpression()       {}
+func (n NumberLiteral) isExpression()       {}
+func (c ColumnExpression) isExpression()    {}
 
 type ParameterExpression struct {
 	Name string
@@ -208,7 +213,7 @@ type Join struct {
 }
 
 type Limit struct {
-	Count int
+	Count    int
 	HasLimit bool
 }
 

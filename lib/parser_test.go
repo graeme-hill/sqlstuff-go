@@ -33,6 +33,9 @@ func TestParameterized(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, prog.Statements, 1)
 
+	require.Len(t, prog.Parameters, 1)
+	require.Equal(t, "my_id", prog.Parameters[0].Name)
+
 	selectStmt, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 1)

@@ -9,7 +9,7 @@ import (
 
 func Parse(sql string) (Program, error) {
 	buffer := newTokenBuffer()
-	p := parser{reader: buffer}
+	p := parser{reader: buffer, parameters: []Parameter{}}
 	var lexErr error = nil
 
 	go (func() {
@@ -17,27 +17,26 @@ func Parse(sql string) (Program, error) {
 		buffer.Done()
 	})()
 
-	statements, err := p.scan()
+	prog, err := p.scan()
 	if err == nil {
 		err = lexErr
 	}
-	return Program{
-		Statements: statements,
-	}, err
+	return prog, err
 }
 
 type parser struct {
-	reader tokenReader
+	reader     tokenReader
+	parameters []Parameter
 }
 
-func (p *parser) scan() ([]Statement, error) {
+func (p *parser) scan() (Program, error) {
 	statements := []Statement{}
 	requireSemicolon := false
 
 	for {
 		tok, done, err := p.reader.Next()
 		if err != nil {
-			return nil, err
+			return Program{}, err
 		}
 
 		if done {
@@ -55,7 +54,7 @@ func (p *parser) scan() ([]Statement, error) {
 		if isKeyword(tok, "SELECT") {
 			selectStatement, err := p.scanSelect()
 			if err != nil {
-				return nil, err
+				return Program{}, err
 			}
 			statements = append(statements, selectStatement)
 			requireSemicolon = true
@@ -66,48 +65,51 @@ func (p *parser) scan() ([]Statement, error) {
 		if isKeyword(tok, "CREATE") {
 			tok, err = p.requireToken(tokenTypeWord)
 			if err != nil {
-				return nil, err
+				return Program{}, err
 			}
 
 			// CREATE TABLE ...
 			if isKeyword(tok, "TABLE") {
 				createTableStatement, err := p.scanCreateTable()
 				if err != nil {
-					return nil, err
+					return Program{}, err
 				}
 				statements = append(statements, createTableStatement)
 				requireSemicolon = true
 				continue
 			}
 
-			return nil, fmt.Errorf("Invalid CREATE statement at %s", tokenString(tok))
+			return Program{}, fmt.Errorf("Invalid CREATE statement at %s", tokenString(tok))
 		}
 
 		// ALTER ...
 		if isKeyword(tok, "ALTER") {
 			tok, err = p.requireToken(tokenTypeWord)
 			if err != nil {
-				return nil, err
+				return Program{}, err
 			}
 
 			// ALTER TABLE ...
 			if isKeyword(tok, "TABLE") {
 				alterTableStatement, err := p.scanAlterTable()
 				if err != nil {
-					return nil, err
+					return Program{}, err
 				}
 				statements = append(statements, alterTableStatement)
 				requireSemicolon = true
 				continue
 			}
 
-			return nil, fmt.Errorf("Invalid ALTER statement at %s", tokenString(tok))
+			return Program{}, fmt.Errorf("Invalid ALTER statement at %s", tokenString(tok))
 		}
 
-		return nil, fmt.Errorf("Expecting start of statement but got <%s>", tokenString(tok))
+		return Program{}, fmt.Errorf("Expecting start of statement but got <%s>", tokenString(tok))
 	}
 
-	return statements, nil
+	return Program{
+		Statements: statements,
+		Parameters: p.parameters,
+	}, nil
 }
 
 func isKeyword(tok token, keyword string) bool {
@@ -479,7 +481,7 @@ func (p *parser) scanSelect() (Select, error) {
 		Joins:  joins,
 		Where:  where,
 		Having: having,
-		Limit: limit,
+		Limit:  limit,
 	}, nil
 }
 
@@ -487,7 +489,7 @@ func (p *parser) scanLimit() (Limit, error) {
 	if !p.checkWord("LIMIT") {
 		return Limit{}, nil
 	}
-	
+
 	// We are in a LIMIT clause so expect a number or 'ALL'
 	next, done, err := p.reader.Next()
 	if err != nil {
@@ -503,7 +505,7 @@ func (p *parser) scanLimit() (Limit, error) {
 		}
 		return Limit{
 			HasLimit: true,
-			Count: i,
+			Count:    i,
 		}, nil
 	} else if isKeyword(next, "ALL") {
 		return Limit{}, nil
@@ -898,6 +900,16 @@ func (p *parser) scanExpr() (Expression, error) {
 	return left, nil
 }
 
+func (p *parser) foundParameter(param Parameter) {
+	for _, existing := range p.parameters {
+		if existing.Name == param.Name {
+			// Parameter already exists so do nothing
+			return
+		}
+	}
+	p.parameters = append(p.parameters, param)
+}
+
 func (p *parser) scanSubExpr() (Expression, error) {
 	tok, done, err := p.reader.Next()
 	if err != nil {
@@ -909,9 +921,11 @@ func (p *parser) scanSubExpr() (Expression, error) {
 
 	// Parameters (eg: $foo)
 	if tok.tokType == tokenTypeParameter {
-		return ParameterExpression{
+		param := ParameterExpression{
 			Name: string(tok.value),
-		}, nil
+		}
+		p.foundParameter(Parameter{Name: param.Name})
+		return param, nil
 	}
 
 	// Number literals
