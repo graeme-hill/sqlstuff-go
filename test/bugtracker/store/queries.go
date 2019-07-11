@@ -54,9 +54,12 @@ type GetIssueResult2 struct {
 	Created time.Time
 }
 
-func (client SQLDBClient) GetIssue() (r1 []GetIssueResult1, r2 []GetIssueResult2, err error) {
+func (client SQLDBClient) GetIssue(tid interface{}, id interface{}) (r1 []GetIssueResult1, r2 []GetIssueResult2, err error) {
+	r1 = nil
+	r2 = nil
+
 	sql := "SELECT\n  i.id,\n  i.name,\n  i.fields,\n  i.created,\n  i.modified,\n  p.name AS project_name\nFROM issues i\nJOIN projects p ON p.tid = i.tid AND p.\"key\" = i.project_key\nWHERE i.tid = $tid AND i.id = $id\nLIMIT 1;\n\nSELECT\n  tag_key,\n  created\nFROM issue_tags\nWHERE tid = $tid AND issue_id = $id;\n"
-	rows, err := client.db.Query(sql)
+	rows, err := client.db.Query(sql, tid, id)
 	if err != nil {
 		return
 	}
@@ -121,9 +124,11 @@ type GetProjectsResult struct {
 	Modified time.Time
 }
 
-func (client SQLDBClient) GetProjects() (r1 []GetProjectsResult, err error) {
+func (client SQLDBClient) GetProjects(tid interface{}) (r1 []GetProjectsResult, err error) {
+	r1 = nil
+
 	sql := "SELECT \"key\", \"name\", created, modified FROM projects WHERE tid = $tid"
-	rows, err := client.db.Query(sql)
+	rows, err := client.db.Query(sql, tid)
 	if err != nil {
 		return
 	}
@@ -161,9 +166,11 @@ type GetTagsResult struct {
 	Created time.Time
 }
 
-func (client SQLDBClient) GetTags() (r1 []GetTagsResult, err error) {
+func (client SQLDBClient) GetTags(tid interface{}) (r1 []GetTagsResult, err error) {
+	r1 = nil
+
 	sql := "SELECT \"key\", created FROM tags WHERE tid = $tid"
-	rows, err := client.db.Query(sql)
+	rows, err := client.db.Query(sql, tid)
 	if err != nil {
 		return
 	}

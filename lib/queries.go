@@ -7,10 +7,11 @@ import (
 )
 
 type QueryBatch struct {
-	Name   string
-	SQL    string
-	AST    []Statement
-	Shapes [][]ColumnDefinition
+	Name       string
+	SQL        string
+	AST        []Statement
+	Shapes     [][]ColumnDefinition
+	Parameters []Parameter
 }
 
 func ReadQueriesFromDir(dir string, model Model) ([]QueryBatch, error) {
@@ -51,6 +52,7 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 		return QueryBatch{}, err
 	}
 	query.AST = prog.Statements
+	query.Parameters = prog.Parameters
 
 	// Extract the shape of each statement within the query
 	for _, stmt := range prog.Statements {
