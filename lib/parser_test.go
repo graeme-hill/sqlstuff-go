@@ -242,3 +242,29 @@ func TestSelectFeatures(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "77", rightWhere.Value)
 }
+
+func TestInsert(t *testing.T) {
+	prog, err := Parse("INSERT INTO users (name, email) VALUES ('Graeme', 'graeme@foobar.com');")
+	require.NoError(t, err)
+	require.Len(t, prog.Statements, 1)
+
+	insertStmt, ok := prog.Statements[0].(Insert)
+	require.True(t, ok)
+	require.Equal(t, "users", insertStmt.Target.TableName)
+
+	require.Len(t, insertStmt.Columns, 2)
+	require.Len(t, insertStmt.Values, 2)
+
+	require.Equal(t, "name", insertStmt.Columns[0].ColumnName)
+	require.Equal(t, "users", insertStmt.Columns[0].TableName)
+	require.Equal(t, "email", insertStmt.Columns[1].ColumnName)
+	require.Equal(t, "users", insertStmt.Columns[1].TableName)
+
+	expr1, ok := insertStmt.Values[0].(StringLiteral)
+	require.True(t, ok)
+	require.Equal(t, "Graeme", expr1.Value)
+
+	expr2, ok := insertStmt.Values[1].(StringLiteral)
+	require.True(t, ok)
+	require.Equal(t, "graeme@foobar.com", expr2.Value)
+}

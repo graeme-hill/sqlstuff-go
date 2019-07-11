@@ -61,6 +61,16 @@ func (p *parser) scan() (Program, error) {
 			continue
 		}
 
+		if isKeyword(tok, "INSERT") {
+			insertStatement, err := p.scanInsert()
+			if err != nil {
+				return Program{}, err
+			}
+			statements = append(statements, insertStatement)
+			requireSemicolon = true
+			continue
+		}
+
 		// CREATE ...
 		if isKeyword(tok, "CREATE") {
 			tok, err = p.requireToken(tokenTypeWord)
@@ -114,6 +124,87 @@ func (p *parser) scan() (Program, error) {
 
 func isKeyword(tok token, keyword string) bool {
 	return tok.tokType == tokenTypeWord && strings.EqualFold(string(tok.value), keyword)
+}
+
+// Reads after "INSERT"
+func (p *parser) scanInsert() (Statement, error) {
+	result := Insert{
+		Columns: []ColumnExpression{},
+		Values:  []Expression{},
+	}
+
+	// Make sure it starts with INSERT INTO...
+	if !p.checkWord("INTO") {
+		return Insert{}, errors.New("Expecting INTO after INSERT")
+	}
+
+	// INSERT INTO table_name...
+	target, err := p.scanTargetTable()
+	if err != nil {
+		return Insert{}, err
+	}
+	if target.Subselect != nil {
+		return Insert{}, errors.New("Cannot insert into a subselect")
+	}
+	result.Target = target
+
+	// INSERT INTO table_name (...
+	_, err = p.requireToken(tokenTypeLParen)
+	if err != nil {
+		return Insert{}, err
+	}
+
+	// INSERT INTO table_name (col1, col2...
+	exprs, err := p.scanExprList()
+	if err != nil {
+		return Insert{}, err
+	}
+	for _, expr := range exprs {
+		colExpr, ok := expr.(ColumnExpression)
+		if !ok {
+			return Insert{}, errors.New("Invalid target column in INSERT")
+		}
+		if colExpr.TableName == "" {
+			if target.Alias == "" {
+				colExpr.TableName = target.TableName
+			} else {
+				colExpr.TableName = target.Alias
+			}
+		}
+		result.Columns = append(result.Columns, colExpr)
+	}
+
+	// INSERT INTO table_name (col1, col2)...
+	_, err = p.requireToken(tokenTypeRParen)
+	if err != nil {
+		return Insert{}, nil
+	}
+
+	// INSERT INTO table_name (col1, col2) VALUES...
+	if !p.checkWord("VALUES") {
+		return Insert{}, errors.New("Expecting VALUES")
+	}
+
+	// INSERT INTO table_name (col1, col2) VALUES (...
+	_, err = p.requireToken(tokenTypeLParen)
+	if err != nil {
+		return Insert{}, err
+	}
+
+	// INSERT INTO table_name (col1, col2) VALUES ('one', 'two'...
+	valExprs, err := p.scanExprList()
+	if err != nil {
+		return Insert{}, err
+	}
+	result.Values = valExprs
+
+	// INSERT INTO table_name (col1, col2) VALUES ('one', 'two')
+	_, err = p.requireToken(tokenTypeRParen)
+	if err != nil {
+		return Insert{}, nil
+	}
+
+	return result, nil
 }
 
 // Reads after "ALTER TABLE"
@@ -450,7 +541,7 @@ func (p *parser) scanSelect() (Select, error) {
 		return Select{}, err
 	}
 
-	target, err := p.scanSelectTarget()
+	target, err := p.scanTargetTable()
 	if err != nil {
 		return Select{}, err
 	}
@@ -511,6 +602,33 @@ func (p *parser) scanLimit() (Limit, error) {
 		return Limit{}, nil
 	}
 	return Limit{}, fmt.Errorf("Invalid LIMIT value <%s>", tokenString(next))
+}
+
+// Reads a comma-separated list of expressions. eg:
+//   1+1, 'hello', foo.bar
+// The expressions can NOT have aliases like ""'hello' AS name"
+func (p *parser) scanExprList() ([]Expression, error) {
+	exprs := []Expression{}
+	for {
+		expr, err := p.scanExpr()
+		if err != nil {
+			return nil, err
+		}
+		exprs = append(exprs, expr)
+
+		next, done, err := p.reader.Peek()
+		if err != nil {
+			return nil, err
+		} else if done {
+			break
+		}
+
+		if next.tokType != tokenTypeComma {
+			break
+		}
+		_ = p.advance()
+	}
+	return exprs, nil
 }
 
 func (p *parser) scanFieldList() ([]Field, error) {
@@ -622,7 +740,7 @@ func (p *parser) scanJoins() ([]Join, error) {
 
 		// If got here then it is a join and we know the type, so now parse the
 		// thing it is joining with.
-		joinTarget, err := p.scanSelectTarget()
+		joinTarget, err := p.scanTargetTable()
 		if err != nil {
 			return nil, err
 		}
@@ -737,70 +855,70 @@ func getBinaryConditionOperator(tok token) (binaryCondOpType, error) {
 	return 0, fmt.Errorf("Unknown binary condition operator at <%s>", tokenString(tok))
 }
 
-func (p *parser) scanSelectTarget() (SelectTarget, error) {
+func (p *parser) scanTargetTable() (TargetTable, error) {
 	next, done, err := p.reader.Next()
 	if err != nil {
-		return SelectTarget{}, err
+		return TargetTable{}, err
 	}
 	if done {
-		return SelectTarget{}, fmt.Errorf("Expecting select target but got <%s>", tokenString(next))
+		return TargetTable{}, fmt.Errorf("Expecting select target but got <%s>", tokenString(next))
 	}
 
-	target := SelectTarget{}
+	target := TargetTable{}
 
 	if next.tokType == tokenTypeWord {
 		target.TableName = string(next.value)
 	} else if next.tokType == tokenTypeLParen {
 		next, done, err = p.reader.Next()
 		if err != nil {
-			return SelectTarget{}, err
+			return TargetTable{}, err
 		}
 		if done {
-			return SelectTarget{}, errors.New("Expecting SELECT but got EOF")
+			return TargetTable{}, errors.New("Expecting SELECT but got EOF")
 		}
 
 		if isKeyword(next, "SELECT") {
 			subSelect, err := p.scanSelect()
 			if err != nil {
-				return SelectTarget{}, err
+				return TargetTable{}, err
 			}
 			target.Subselect = &subSelect
 
 			next, done, err := p.reader.Next()
 			if err != nil {
-				return SelectTarget{}, err
+				return TargetTable{}, err
 			}
 			if done {
-				return SelectTarget{}, errors.New("Expecting ')' but got EOF")
+				return TargetTable{}, errors.New("Expecting ')' but got EOF")
 			}
 			if next.tokType != tokenTypeRParen {
-				return SelectTarget{}, fmt.Errorf("Expecting ')' but got <%s>", tokenString(next))
+				return TargetTable{}, fmt.Errorf("Expecting ')' but got <%s>", tokenString(next))
 			}
 		} else {
-			return SelectTarget{}, errors.New("Parenthesis in FROM clause must contain sub-select")
+			return TargetTable{}, errors.New("Parenthesis in FROM clause must contain sub-select")
 		}
 	}
 
 	next, done, err = p.reader.Peek()
 	if err != nil {
-		return SelectTarget{}, err
+		return TargetTable{}, err
 	}
 	if done {
 		return target, nil
 	}
 
-	if isSelectTargetAlias(next) {
+	if isTargetTableAlias(next) {
 		target.Alias = string(next.value)
 		err = p.advance()
 		if err != nil {
-			return SelectTarget{}, nil
+			return TargetTable{}, nil
 		}
 	}
 
 	return target, nil
 }
 
-func isSelectTargetAlias(tok token) bool {
+func isTargetTableAlias(tok token) bool {
 	if tok.tokType != tokenTypeWord {
 		return false
 	}

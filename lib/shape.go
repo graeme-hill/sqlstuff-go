@@ -141,14 +141,14 @@ func getAvailableColumns(
 	available := map[string][]ColumnDefinition{}
 
 	// FROM clause
-	err := addSelectTarget(available, model, query.From)
+	err := addTargetTable(available, model, query.From)
 	if err != nil {
 		return nil, err
 	}
 
 	// JOINs
 	for _, join := range query.Joins {
-		err = addSelectTarget(available, model, join.Target)
+		err = addTargetTable(available, model, join.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -157,10 +157,10 @@ func getAvailableColumns(
 	return available, nil
 }
 
-func addSelectTarget(
+func addTargetTable(
 	available map[string][]ColumnDefinition,
 	model Model,
-	target SelectTarget,
+	target TargetTable,
 ) error {
 	if len(target.TableName) > 0 {
 		// Just a table name (possibly aliased)

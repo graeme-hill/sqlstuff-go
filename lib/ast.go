@@ -113,6 +113,7 @@ type Statement interface {
 }
 
 func (s Select) isStatement()      {}
+func (i Insert) isStatement()      {}
 func (s CreateTable) isStatement() {}
 func (s AddColumn) isStatement()   {}
 func (s DropColumn) isStatement()  {}
@@ -168,7 +169,7 @@ type Field struct {
 	Expr  Expression
 }
 
-type SelectTarget struct {
+type TargetTable struct {
 	Alias     string
 	TableName string
 	Subselect *Select
@@ -208,7 +209,7 @@ type NextSelect struct {
 
 type Join struct {
 	Type   joinType
-	Target SelectTarget
+	Target TargetTable
 	On     Condition
 }
 
@@ -217,9 +218,15 @@ type Limit struct {
 	HasLimit bool
 }
 
+type Insert struct {
+	Target  TargetTable
+	Columns []ColumnExpression
+	Values  []Expression
+}
+
 type Select struct {
 	Fields  []Field
-	From    SelectTarget
+	From    TargetTable
 	Joins   []Join
 	Where   Condition
 	Having  Condition
