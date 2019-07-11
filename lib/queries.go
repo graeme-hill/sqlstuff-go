@@ -46,14 +46,14 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 	}
 
 	// Parse the file to get AST
-	statements, err := Parse(query.SQL)
+	prog, err := Parse(query.SQL)
 	if err != nil {
 		return QueryBatch{}, err
 	}
-	query.AST = statements
+	query.AST = prog.Statements
 
 	// Extract the shape of each statement within the query
-	for _, stmt := range statements {
+	for _, stmt := range prog.Statements {
 		defs, err := getShape(stmt, model)
 		if err != nil {
 			return QueryBatch{}, err

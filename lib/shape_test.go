@@ -11,9 +11,9 @@ func TestGetShape(t *testing.T) {
 	require.NoError(t, err)
 	model, err := ModelFromMigrations(migrations)
 	require.NoError(t, err)
-	statements, err := Parse("SELECT id, email FROM users")
+	prog, err := Parse("SELECT id, email FROM users")
 	require.NoError(t, err)
-	query, ok := statements[0].(Select)
+	query, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 
 	columns, err := getShape(query, model)

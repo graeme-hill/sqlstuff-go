@@ -109,11 +109,11 @@ func (m *ModelBuilder) handleDropColumnStmt(dc DropColumn) error {
 func ModelFromMigrations(migrations []*Migration) (Model, error) {
 	builder := NewModelBuilder()
 	for _, migration := range migrations {
-		statements, err := Parse(migration.UpSQL)
+		prog, err := Parse(migration.UpSQL)
 		if err != nil {
 			return Model{}, err
 		}
-		for _, stmt := range statements {
+		for _, stmt := range prog.Statements {
 			err = builder.handleStmt(stmt)
 			if err != nil {
 				return Model{}, err

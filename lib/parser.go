@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func Parse(sql string) ([]Statement, error) {
+func Parse(sql string) (Program, error) {
 	buffer := newTokenBuffer()
 	p := parser{reader: buffer}
 	var lexErr error = nil
@@ -21,7 +21,9 @@ func Parse(sql string) ([]Statement, error) {
 	if err == nil {
 		err = lexErr
 	}
-	return statements, err
+	return Program{
+		Statements: statements,
+	}, err
 }
 
 type parser struct {
@@ -903,6 +905,13 @@ func (p *parser) scanSubExpr() (Expression, error) {
 	}
 	if done {
 		return ColumnExpression{}, errors.New("Expecting expression but found EOF")
+	}
+
+	// Parameters (eg: $foo)
+	if tok.tokType == tokenTypeParameter {
+		return ParameterExpression{
+			Name: string(tok.value),
+		}, nil
 	}
 
 	// Number literals

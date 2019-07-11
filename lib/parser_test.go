@@ -7,11 +7,11 @@ import (
 )
 
 func TestBasicSelect(t *testing.T) {
-	statements, err := Parse("SELECT foo FROM bar")
+	prog, err := Parse("SELECT foo FROM bar")
 	require.NoError(t, err)
-	require.Len(t, statements, 1)
+	require.Len(t, prog.Statements, 1)
 
-	selectStmt, ok := statements[0].(Select)
+	selectStmt, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 1)
 
@@ -28,12 +28,31 @@ func TestBasicSelect(t *testing.T) {
 	require.Equal(t, "bar", target.TableName)
 }
 
-func TestSubSelect(t *testing.T) {
-	statements, err := Parse("SELECT things.foo as stuff FROM (select bar from blah) things")
+func TestParameterized(t *testing.T) {
+	prog, err := Parse("SELECT foo FROM bar WHERE id=$my_id")
 	require.NoError(t, err)
-	require.Len(t, statements, 1)
+	require.Len(t, prog.Statements, 1)
 
-	selectStmt, ok := statements[0].(Select)
+	selectStmt, ok := prog.Statements[0].(Select)
+	require.True(t, ok)
+	require.Len(t, selectStmt.Fields, 1)
+
+	where, ok := selectStmt.Where.(BinaryCondition)
+	require.True(t, ok)
+	id, ok := where.Left.(ColumnExpression)
+	require.True(t, ok)
+	require.Equal(t, "id", id.ColumnName)
+	param, ok := where.Right.(ParameterExpression)
+	require.True(t, ok)
+	require.Equal(t, "my_id", param.Name)
+}
+
+func TestSubSelect(t *testing.T) {
+	prog, err := Parse("SELECT things.foo as stuff FROM (select bar from blah) things")
+	require.NoError(t, err)
+	require.Len(t, prog.Statements, 1)
+
+	selectStmt, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 1)
 
@@ -51,15 +70,14 @@ func TestSubSelect(t *testing.T) {
 }
 
 func TestMultiSelect(t *testing.T) {
-	statements, err := Parse(`
+	prog, err := Parse(`
 		SELECT foo FROM bar;
-		SELECT hello FROM world;
-`)
+		SELECT hello FROM world;`)
 	require.NoError(t, err)
-	require.Len(t, statements, 2)
+	require.Len(t, prog.Statements, 2)
 
 	// First query
-	selectStmt, ok := statements[0].(Select)
+	selectStmt, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 1)
 
@@ -76,7 +94,7 @@ func TestMultiSelect(t *testing.T) {
 	require.Equal(t, "bar", target.TableName)
 
 	// Second query
-	selectStmt, ok = statements[1].(Select)
+	selectStmt, ok = prog.Statements[1].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 1)
 
@@ -94,11 +112,11 @@ func TestMultiSelect(t *testing.T) {
 }
 
 func TestCreateTable(t *testing.T) {
-	statements, err := Parse("CREATE TABLE people(id int not null primary key, name varchar(200))")
+	prog, err := Parse("CREATE TABLE people(id int not null primary key, name varchar(200))")
 	require.NoError(t, err)
-	require.Len(t, statements, 1)
+	require.Len(t, prog.Statements, 1)
 
-	create, ok := statements[0].(CreateTable)
+	create, ok := prog.Statements[0].(CreateTable)
 	require.True(t, ok)
 	require.Equal(t, "people", create.Name)
 	require.Len(t, create.Columns, 2)
@@ -115,11 +133,11 @@ func TestCreateTable(t *testing.T) {
 }
 
 func TestAddColumn(t *testing.T) {
-	statements, err := Parse("ALTER TABLE people ADD COLUMN name VARCHAR(200) NOT NULL")
+	prog, err := Parse("ALTER TABLE people ADD COLUMN name VARCHAR(200) NOT NULL")
 	require.NoError(t, err)
-	require.Len(t, statements, 1)
+	require.Len(t, prog.Statements, 1)
 
-	addColumn, ok := statements[0].(AddColumn)
+	addColumn, ok := prog.Statements[0].(AddColumn)
 	require.True(t, ok)
 	require.Equal(t, "people", addColumn.TableName)
 	require.Equal(t, "name", addColumn.Column.Name)
@@ -129,7 +147,7 @@ func TestAddColumn(t *testing.T) {
 }
 
 func TestSelectFeatures(t *testing.T) {
-	statements, err := Parse(`
+	prog, err := Parse(`
 		SELECT 
 			u.name,
 			u.email,
@@ -139,9 +157,9 @@ func TestSelectFeatures(t *testing.T) {
 		LEFT JOIN groups g ON g.id = ug.group_id
 		WHERE u.id = 77`)
 	require.NoError(t, err)
-	require.Len(t, statements, 1)
+	require.Len(t, prog.Statements, 1)
 
-	selectStmt, ok := statements[0].(Select)
+	selectStmt, ok := prog.Statements[0].(Select)
 	require.True(t, ok)
 	require.Len(t, selectStmt.Fields, 3)
 

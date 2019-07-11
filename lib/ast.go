@@ -99,6 +99,10 @@ const (
 	UnaryExprOpNegative unaryExprOpType = iota
 )
 
+type Program struct {
+	Statements []Statement
+}
+
 type Statement interface {
 	isStatement()
 }
@@ -113,12 +117,17 @@ type Expression interface {
 	isExpression()
 }
 
+func (p ParameterExpression) isExpression()          {}
 func (f FunctionExpression) isExpression() {}
 func (b BinaryExpression) isExpression()   {}
 func (b UnaryExpression) isExpression()    {}
 func (s StringLiteral) isExpression()      {}
 func (n NumberLiteral) isExpression()      {}
 func (c ColumnExpression) isExpression()   {}
+
+type ParameterExpression struct {
+	Name string
+}
 
 type StringLiteral struct {
 	Value string
