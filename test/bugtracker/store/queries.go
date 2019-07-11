@@ -11,6 +11,10 @@ import (
 )
 
 type DBClient interface {
+	CreateIssue() ([]CreateIssueResult, error)
+	CreateIssueType() ([]CreateIssueTypeResult, error)
+	CreateProject() ([]CreateProjectResult, error)
+	CreateTenant() ([]CreateTenantResult, error)
 	GetIssue() ([]GetIssueResult1, []GetIssueResult2, error)
 	GetProjects() ([]GetProjectsResult, error)
 	GetTags() ([]GetTagsResult, error)
@@ -34,6 +38,126 @@ func NewDBClient(connectionString string) (DBClient, error) {
 
 func (client SQLDBClient) Close() {
 	client.db.Close()
+}
+
+/******************************************************************************
+ * create_issue
+ ****************************************************************************/
+
+type CreateIssueResult struct {
+}
+
+func (client SQLDBClient) CreateIssue(tid interface{}, id interface{}, name interface{}, project_key interface{}, fields interface{}) (r1 []CreateIssueResult, err error) {
+	r1 = nil
+
+	sql := "INSERT INTO issues\n  (tid, id, \"name\", project_key, fields, created)\nVALUES\n  ($tid, $id, $name, $project_key, $fields, CURRENT_TIMESTAMP);"
+	rows, err := client.db.Query(sql, tid, id, name, project_key, fields)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ()
+		err = rows.Scan()
+		if err != nil {
+			return
+		}
+
+		r1 = append(r1, CreateIssueResult{})
+	}
+
+	return
+}
+
+/******************************************************************************
+ * create_issue_type
+ ****************************************************************************/
+
+type CreateIssueTypeResult struct {
+}
+
+func (client SQLDBClient) CreateIssueType(tid interface{}, id interface{}, key interface{}) (r1 []CreateIssueTypeResult, err error) {
+	r1 = nil
+
+	sql := "INSERT INTO issue_types\n  (tid, id, \"key\")\nVALUES\n  ($tid, $id, $key);"
+	rows, err := client.db.Query(sql, tid, id, key)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ()
+		err = rows.Scan()
+		if err != nil {
+			return
+		}
+
+		r1 = append(r1, CreateIssueTypeResult{})
+	}
+
+	return
+}
+
+/******************************************************************************
+ * create_project
+ ****************************************************************************/
+
+type CreateProjectResult struct {
+}
+
+func (client SQLDBClient) CreateProject(tid interface{}, key interface{}, name interface{}) (r1 []CreateProjectResult, err error) {
+	r1 = nil
+
+	sql := "INSERT INTO projects\n  (tid, \"key\", \"name\", created)\nVALUES\n  ($tid, $key, $name, CURRENT_TIMESTAMP);"
+	rows, err := client.db.Query(sql, tid, key, name)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ()
+		err = rows.Scan()
+		if err != nil {
+			return
+		}
+
+		r1 = append(r1, CreateProjectResult{})
+	}
+
+	return
+}
+
+/******************************************************************************
+ * create_tenant
+ ****************************************************************************/
+
+type CreateTenantResult struct {
+}
+
+func (client SQLDBClient) CreateTenant(id interface{}, key interface{}, name interface{}) (r1 []CreateTenantResult, err error) {
+	r1 = nil
+
+	sql := "INSERT INTO tenants \n  (id, \"key\", \"name\", created)\nVALUES\n  ($id, $key, $name, CURRENT_TIMESTAMP);"
+	rows, err := client.db.Query(sql, id, key, name)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ()
+		err = rows.Scan()
+		if err != nil {
+			return
+		}
+
+		r1 = append(r1, CreateTenantResult{})
+	}
+
+	return
 }
 
 /******************************************************************************

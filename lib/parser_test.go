@@ -268,3 +268,15 @@ func TestInsert(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "graeme@foobar.com", expr2.Value)
 }
+
+func TestLimit(t *testing.T) {
+	prog, err := Parse("SELECT foo FROM bar LIMIT 1")
+	require.NoError(t, err)
+	require.Len(t, prog.Statements, 1)
+
+	selectStmt, ok := prog.Statements[0].(Select)
+	require.True(t, ok)
+	require.Len(t, selectStmt.Fields, 1)
+	require.True(t, selectStmt.Limit.HasLimit)
+	require.Equal(t, selectStmt.Limit.Count, 1)
+}

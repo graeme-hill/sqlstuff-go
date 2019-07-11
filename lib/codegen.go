@@ -53,7 +53,7 @@ func (client SQLDBClient) Close() {
 {{range .Batches}}
 /******************************************************************************
  * {{.Name}}
- ****************************************************************************/
+ *****************************************************************************/
 
 {{range .Queries}}
 type {{.Result.Name}} struct {
@@ -138,6 +138,7 @@ type columnViewModel struct {
 type queryViewModel struct {
 	Result resultTypeViewModel
 	Index  int
+	Type   queryResultType
 }
 
 type parameterViewModel struct {
@@ -214,6 +215,7 @@ func newViewModel(pkg string, batches []QueryBatch) (codeGenViewModel, error) {
 			queries = append(queries, queryViewModel{
 				Result: rvm,
 				Index:  i + 1,
+				Type:   shape.Type,
 			})
 		}
 
@@ -237,10 +239,10 @@ func newViewModel(pkg string, batches []QueryBatch) (codeGenViewModel, error) {
 	return vm, nil
 }
 
-func newResultTypeViewModel(index int, of int, batchName string, shape []ColumnDefinition) (resultTypeViewModel, error) {
+func newResultTypeViewModel(index int, of int, batchName string, shape Shape) (resultTypeViewModel, error) {
 	columns := []columnViewModel{}
 
-	for i, c := range shape {
+	for i, c := range shape.Columns {
 		typ, err := goType(c)
 		if err != nil {
 			return resultTypeViewModel{}, err

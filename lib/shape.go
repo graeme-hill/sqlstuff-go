@@ -6,33 +6,88 @@ import (
 	"strings"
 )
 
-func getShape(stmt Statement, model Model) ([]ColumnDefinition, error) {
+// Enum for the possible return values of a query. Examples:
+//   QueryResultTypeManyRows: SELECT foo FROM bar
+//   QueryResultTypeOneRow: SELECT foo FROM bar LIMIT 1
+//   QueryResultTypeCommand: INSERT INTO foo (bar) VALUES ('hello')
+type queryResultType int
+
+const (
+	QueryResultTypeManyRows queryResultType = iota
+	QueryResultTypeOneRow
+	QueryResultTypeCommand
+)
+
+type Shape struct {
+	Columns []ColumnDefinition
+	Type    queryResultType
+}
+
+func getShape(stmt Statement, model Model) (Shape, error) {
 	switch typed := stmt.(type) {
 	case Select:
 		return getSelectShape(typed, model)
+	case Insert:
+		return getInsertShape(typed, model)
 	default:
-		return nil, errors.New("getShape not implemented for this type of statement yet")
+		return Shape{}, errors.New("getShape not implemented for this type of statement yet")
 	}
+}
+
+// A normal insert that looks like INSERT INTO foo (x) VALUES (1) will not have
+// any result columns, but it you use RETURNING then it will behave like a
+// SELECT.
+func getInsertShape(query Insert, model Model) (Shape, error) {
+	// Since RETURNS is not implemented yet always assume no fields are selected
+	return Shape{
+		Columns: []ColumnDefinition{},
+		Type:    QueryResultTypeCommand,
+	}, nil
 }
 
 // Returns the data types and names of the columns that will come out of the
 // given query/model pair.
-func getSelectShape(query Select, model Model) ([]ColumnDefinition, error) {
+func getSelectShape(query Select, model Model) (Shape, error) {
 	available, err := getAvailableColumns(query, model)
 	if err != nil {
-		return nil, err
+		return Shape{}, err
 	}
 
 	resultColumns := []ColumnDefinition{}
 	for _, field := range query.Fields {
 		def, err := fieldAsColumnDefinition(field, model, available)
 		if err != nil {
-			return nil, err
+			return Shape{}, err
 		}
 		resultColumns = append(resultColumns, def)
 	}
 
-	return resultColumns, nil
+	resultType := getSelectResultType(query)
+
+	return Shape{
+		Columns: resultColumns,
+		Type:    resultType,
+	}, nil
+}
+
+func conditionCoversConstraint(cond Condition, constraint Constraint) bool {
+	// TO DO
+	return false
+}
+
+func getSelectResultType(s Select, model Model) queryResultType {
+	if s.Limit.HasLimit && s.Limit.Count == 1 {
+		// If the top level query explcitly includes "LIMIT 1"
+		return QueryResultTypeOneRow
+	}
+	
+	isMany := true
+
+	for 
+
+	for _, constraint := range model.Tables[]
+
+	return QueryResultTypeManyRows
 }
 
 func fieldAsColumnDefinition(
@@ -188,11 +243,11 @@ func addTargetTable(
 		if exists {
 			return fmt.Errorf("Duplicate alias '%s'", target.Alias)
 		}
-		subColumns, err := getShape(*target.Subselect, model)
+		shape, err := getShape(*target.Subselect, model)
 		if err != nil {
 			return err
 		}
-		available[target.Alias] = subColumns
+		available[target.Alias] = shape.Columns
 	}
 
 	return nil

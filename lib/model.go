@@ -2,13 +2,30 @@ package lib
 
 import "fmt"
 
+type constraintType int
+
+const (
+	ConstraintTypePrimaryKey constraintType = iota
+	ConstraintTypeUnique
+)
+
 type Model struct {
 	Tables map[string]*Table
 }
 
 type Table struct {
-	Name    string
-	Columns []ColumnDefinition
+	Name        string
+	Columns     []ColumnDefinition
+	Constraints []Constraint
+}
+
+type Constraint struct {
+	Type    constraintType
+	Columns []string
+}
+
+func (c Constraint) IsUnique() bool {
+	return c.Type == ConstraintTypePrimaryKey || c.Type == ConstraintTypeUnique
 }
 
 type ModelBuilder struct {

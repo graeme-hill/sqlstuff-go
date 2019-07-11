@@ -21,7 +21,9 @@ func TestGetShapeBasic(t *testing.T) {
 	require.Len(t, batch.Shapes, 1)
 	require.Equal(t, "get_users", batch.Name)
 
-	columns := batch.Shapes[0]
+	shape := batch.Shapes[0]
+	require.Equal(t, QueryResultTypeManyRows, shape.Type)
+	columns := shape.Columns
 	require.Len(t, columns, 5)
 
 	require.Equal(t, "id", columns[0].Name)

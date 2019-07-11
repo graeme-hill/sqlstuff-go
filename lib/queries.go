@@ -10,7 +10,7 @@ type QueryBatch struct {
 	Name       string
 	SQL        string
 	AST        []Statement
-	Shapes     [][]ColumnDefinition
+	Shapes     []Shape
 	Parameters []Parameter
 }
 
@@ -43,7 +43,7 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 	query := QueryBatch{
 		Name:   batchNameFromPath(filePath),
 		SQL:    string(bytes),
-		Shapes: [][]ColumnDefinition{},
+		Shapes: []Shape{},
 	}
 
 	// Parse the file to get AST
@@ -56,11 +56,11 @@ func ReadBatchFromFile(filePath string, model Model) (QueryBatch, error) {
 
 	// Extract the shape of each statement within the query
 	for _, stmt := range prog.Statements {
-		defs, err := getShape(stmt, model)
+		shape, err := getShape(stmt, model)
 		if err != nil {
 			return QueryBatch{}, err
 		}
-		query.Shapes = append(query.Shapes, defs)
+		query.Shapes = append(query.Shapes, shape)
 	}
 
 	return query, nil

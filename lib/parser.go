@@ -942,6 +942,8 @@ func isTargetTableAlias(tok token) bool {
 		return false
 	case "ORDER":
 		return false
+	case "LIMIT":
+		return false
 	default:
 		return true
 	}
