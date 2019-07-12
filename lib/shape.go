@@ -75,15 +75,25 @@ func conditionCoversConstraint(cond Condition, constraint Constraint) bool {
 	return false
 }
 
-func getSelectResultType(s Select, model Model) queryResultType {
+// Determines whether the given join is a one or many join within the context
+// of the given select (ie: it takes the parent select's where clause into
+// account). TODO: also consider GROUP BY... and HAVING??
+func getJoinCardinality(j Join, s Select, m Model) queryResultType {
+	
+}
+
+func getSelectCardinality(s Select, model Model) queryResultType {
 	if s.Limit.HasLimit && s.Limit.Count == 1 {
 		// If the top level query explcitly includes "LIMIT 1"
 		return QueryResultTypeOneRow
 	}
 	
-	isMany := true
-
-	for 
+	for _, join := range s.Joins {
+		joinCardinality := getJoinCardinality(join, s, model)
+		if joinCardinality == QueryResultTypeManyRows {
+			return QueryResultTypeManyRows
+		}
+	}
 
 	for _, constraint := range model.Tables[]
 
