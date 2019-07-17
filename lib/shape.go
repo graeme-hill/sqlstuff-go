@@ -18,6 +18,11 @@ const (
 	QueryResultTypeCommand
 )
 
+type TableUniqueConstraint struct {
+	TableName       string
+	UniqueContraint Constraint
+}
+
 type Shape struct {
 	Columns []ColumnDefinition
 	Type    queryResultType
@@ -62,7 +67,10 @@ func getSelectShape(query Select, model Model) (Shape, error) {
 		resultColumns = append(resultColumns, def)
 	}
 
-	resultType := getSelectResultType(query)
+	resultType, err := getSelectCardinality(query, model)
+	if err != nil {
+		return Shape{}, err
+	}
 
 	return Shape{
 		Columns: resultColumns,
@@ -70,34 +78,136 @@ func getSelectShape(query Select, model Model) (Shape, error) {
 	}, nil
 }
 
-func conditionCoversConstraint(cond Condition, constraint Constraint) bool {
+// Returns true iff the conditions cover the constraint.
+func conditionsCoverConstraint(constraint TableUniqueConstraint, conditions ...Condition) bool {
 	// TO DO
 	return false
+}
+
+// Returns true iff the conditions cover any of the constraints.
+func checkConstraints(constraints []TableUniqueConstraint, conditions ...Condition) bool {
+	for _, constraint := range constraints {
+		if conditionsCoverConstraint(constraint, conditions...) {
+			return true
+		}
+	}
+	return false
+}
+
+// Returns true iff the given conditions are enough to select no more than one
+// row from the given table.
+func unique(m Model, tableName string, alias string, conditions ...Condition) (bool, error) {
+	table, ok := m.Tables[tableName]
+	if !ok {
+		return false, fmt.Errorf("Unknown table '%s'", tableName)
+	}
+
+	name := alias
+	if name == "" {
+		name = tableName
+	}
+
+	uniqueConstraints := []TableUniqueConstraint{}
+	for _, constraint := range table.Constraints {
+		if constraint.IsUnique() {
+			uniqueConstraints = append(uniqueConstraints, TableUniqueConstraint{
+				TableName:       name,
+				UniqueContraint: constraint,
+			})
+		}
+	}
+
+	return checkConstraints(uniqueConstraints, conditions...), nil
+}
+
+// Returns the unique definitions for this query.
+func getVirtualUniqueConstraints(s Select, m Model) ([]TableUniqueConstraint, error) {
+	// name := alias
+	// if name == "" {
+	// 	name = s.TableName
+	// }
+
+	// table, ok := m.Tables[s.TableName]
+	// if !ok {
+	// 	return nil, fmt.Errorf("Unknown table '%s'", s.TableName)
+	// }
+
+	// res := []TableUniqueConstraint{}
+	// for _, c := range table.Constraints {
+	// 	res = append(res, TableUniqueConstraint{
+	// 		TableName: name,
+	// 		UniqueContraint: c,
+	// 	})
+	// }
+
+	// return res, nil
+	return nil, nil
 }
 
 // Determines whether the given join is a one or many join within the context
 // of the given select (ie: it takes the parent select's where clause into
 // account). TODO: also consider GROUP BY... and HAVING??
-func getJoinCardinality(j Join, s Select, m Model) queryResultType {
-	
+func getTargetCardinality(target TargetTable, s Select, m Model, conditions ...Condition) (queryResultType, error) {
+	if target.Subselect != nil {
+		// An arbitrarily complex sub-select
+		subselect := *target.Subselect
+		subCardinality, err := getSelectCardinality(subselect, m)
+		if err != nil {
+			return 0, err
+		}
+		if subCardinality == QueryResultTypeOneRow {
+			// Even without looking at the ON or WHERE clauses of the parent query,
+			// this subquery is already fetching max one row so no more work to do.
+			return QueryResultTypeOneRow, nil
+		}
+
+		constraints, err := getVirtualUniqueConstraints(subselect, m)
+		if err != nil {
+			return 0, err
+		}
+
+		if checkConstraints(constraints, append(conditions, s.Where)...) {
+			return QueryResultTypeOneRow, nil
+		}
+		return QueryResultTypeManyRows, nil
+	} else {
+		// Just a table name
+		isUnique, err := unique(m, target.TableName, target.Alias, append(conditions, s.Where)...)
+		if err != nil {
+			return 0, err
+		}
+		if isUnique {
+			return QueryResultTypeOneRow, err
+		}
+		return QueryResultTypeManyRows, err
+	}
 }
 
-func getSelectCardinality(s Select, model Model) queryResultType {
+func getSelectCardinality(s Select, model Model) (queryResultType, error) {
 	if s.Limit.HasLimit && s.Limit.Count == 1 {
 		// If the top level query explcitly includes "LIMIT 1"
-		return QueryResultTypeOneRow
+		return QueryResultTypeOneRow, nil
 	}
-	
+
 	for _, join := range s.Joins {
-		joinCardinality := getJoinCardinality(join, s, model)
+		joinCardinality, err := getTargetCardinality(join.Target, s, model, join.On)
+		if err != nil {
+			return 0, err
+		}
 		if joinCardinality == QueryResultTypeManyRows {
-			return QueryResultTypeManyRows
+			return QueryResultTypeManyRows, nil
 		}
 	}
 
-	for _, constraint := range model.Tables[]
+	cardinality, err := getTargetCardinality(s.From, s, model)
+	if err != nil {
+		return 0, err
+	}
+	if cardinality == QueryResultTypeManyRows {
+		return QueryResultTypeManyRows, nil
+	}
 
-	return QueryResultTypeManyRows
+	return QueryResultTypeOneRow, nil
 }
 
 func fieldAsColumnDefinition(
