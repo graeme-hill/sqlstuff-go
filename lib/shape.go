@@ -120,8 +120,194 @@ func unique(m Model, tableName string, alias string, conditions ...Condition) (b
 	return checkConstraints(uniqueConstraints, conditions...), nil
 }
 
+// Can be a table, view, subselect, etc. Records which alias relates to which
+// unique constraints.
+type cardinalitySource struct {
+	// The alias or inferred name used to refer to columns in this datab source.
+	name string
+
+	uniqueConstraints []TableUniqueConstraint
+}
+
+type cardinalityCalculator struct {
+	model Model
+
+	// The root table or subselect (ie: the FROM clause) and each JOIN are all
+	// considered sources.
+	sources []cardinalitySource
+
+	// For each fully qualified column, keeps track of the other columns that are
+	// engtangled. The clause "ON a.b=c.d" would entangle a.b and c.d.
+	entanglements map[string][]string
+
+	// Keeps track of fully qualified columns that are fixed. The clause
+	// "WHERE u.id=1" would fix u.id.
+	fixedCols map[string]struct{}
+}
+
+func newCardinalitySource(t TargetTable, m Model) (cardinalitySource, error) {
+
+	// If there is a subselect
+	if t.Subselect != nil {
+		if t.Alias == "" {
+			return cardinalitySource{}, errors.New("Subselects must have an alias")
+		}
+		virtualConstraints, err := getVirtualUniqueConstraints(*t.Subselect, m)
+		if err != nil {
+			return cardinalitySource{}, err
+		}
+
+		return cardinalitySource{
+			name:              t.Alias,
+			uniqueConstraints: virtualConstraints,
+		}, nil
+	}
+
+	// If there is not a subselect and just a table name
+	name := t.Alias
+	if name == "" {
+		name = t.TableName
+	}
+
+	tbl, ok := m.Tables[t.TableName]
+	if !ok {
+		return cardinalitySource{}, fmt.Errorf("Unknown table '%s'", t.TableName)
+	}
+
+	uniqueConstraints := getTableUniqueConstraints(tbl.Constraints, name)
+	return cardinalitySource{
+		name:              name,
+		uniqueConstraints: uniqueConstraints,
+	}, nil
+}
+
+func (c *cardinalityCalculator) addSource(t TargetTable) error {
+	src, err := newCardinalitySource(t, c.model)
+	if err != nil {
+		return err
+	}
+	c.sources = append(c.sources, src)
+	return nil
+}
+
+func (c *cardinalityCalculator) entangled(a string, b string) {
+	existing, ok := c.entanglements[a]
+	if ok {
+		c.entanglements[a] = append(existing, b)
+	} else {
+		c.entanglements[a] = []string{b}
+	}
+}
+
+func (c *cardinalityCalculator) fixed(a string) {
+	c.fixedCols[a] = struct{}{}
+}
+
+func (c *cardinalityCalculator) setEntanglement(left Expression, right Expression) {
+	leftCol, leftIsCol := left.(ColumnExpression)
+	rightCol, rightIsCol := right.(ColumnExpression)
+
+	if leftIsCol {
+		if rightIsCol {
+			c.entangled(leftCol.String(), rightCol.String())
+			c.entangled(rightCol.String(), leftCol.String())
+		} else {
+			c.fixed(leftCol.String())
+		}
+	} else if rightIsCol {
+		c.fixed(rightCol.String())
+	}
+}
+
+func (c *cardinalityCalculator) updateEntanglements(cond Condition) {
+	// TO DO: make this more sophisticated. Right now it only supports ANDed
+	// equalities like this:
+	//   u.id = x.user_id AND u.tid = x.tid
+	// but it does not support ORs like this:
+	//   (u.id = x.user_id AND u.tid = x.tid) OR (u.email = x.email AND u.tid = x.tid)
+
+	// It's just a single binary expr like "1 > 2" or "u.email = $email"
+	binary, ok := cond.(BinaryCondition)
+	if ok {
+		if binary.Op == BinaryCondOpEqual {
+			c.setEntanglement(binary.Left, binary.Right)
+		}
+		return
+	}
+
+	// There is at least one logical op like "u.email = $email AND u.tid = $tid"
+	logical, ok := cond.(LogicalCondition)
+	if ok {
+		if logical.Op == LogicalOpAnd {
+			c.updateEntanglements(logical.Left)
+			c.updateEntanglements(logical.Right)
+		}
+	}
+}
+
+func getEntanglements(cs cardinalitySource) map[string][]string {
+	res := map[string][]string{}
+	// TO DO
+	return res
+}
+
+func getTableUniqueConstraints(constraints []Constraint, name string) []TableUniqueConstraint {
+	uniqueConstraints := []TableUniqueConstraint{}
+	for _, constraint := range constraints {
+		if constraint.IsUnique() {
+			uniqueConstraints = append(uniqueConstraints, TableUniqueConstraint{
+				TableName:       name,
+				UniqueContraint: constraint,
+			})
+		}
+	}
+	return uniqueConstraints
+}
+
+func newCardinalityCalculator(s Select, m Model) (cardinalityCalculator, error) {
+	calc := cardinalityCalculator{
+		model: m,
+	}
+
+	err := calc.addSource(s.From)
+	if err != nil {
+		return cardinalityCalculator{}, err
+	}
+
+	for _, join := range s.Joins {
+		err = calc.addSource(join.Target)
+		if err != nil {
+			return cardinalityCalculator{}, nil
+		}
+		calc.updateEntanglements(join.On)
+	}
+
+	calc.updateEntanglements(s.Where)
+
+	return calc, nil
+}
+
 // Returns the unique definitions for this query.
 func getVirtualUniqueConstraints(s Select, m Model) ([]TableUniqueConstraint, error) {
+
+	/*
+	   select u.name, u.email, u.id as uid, g.id as gid, g.name as gname (u.tid=ug.tid=g.tid) (u.id=ug.uid) (g.id=ug.gid)
+	   from users u -> (tid, id) (tid, email)
+	   join user_groups ug on ug.uid = u.id and ug.tid = u.tid (tid, uid, gid)!!
+	   join groups g on g.id = ug.gid and g.tid = u.tid (tid, id) (tid, name)
+	   where u.tid=$tid and u.email=$email
+
+	   where u.tid=$tid and u.email=$email ---> (gid) | (gname)
+	   where u.tid=$tid ---> (uid, gid) (uid, gname) (email, gid) (email, gname)
+
+	   step 1: find unique constraints on each collection
+	   step 2: map equivalent fields from on clauses
+	   step 3: find matched constraints
+	   step 4: mark all constrains from matched tables as matched
+	   step 5: find linked constraints that are matched (loop until no change)
+
+	*/
+
 	// name := alias
 	// if name == "" {
 	// 	name = s.TableName
@@ -184,11 +370,15 @@ func getTargetCardinality(target TargetTable, s Select, m Model, conditions ...C
 }
 
 func getSelectCardinality(s Select, model Model) (queryResultType, error) {
+	// If the top level query explcitly includes "LIMIT 1" then we know is a
+	// single row result and we're done here.
 	if s.Limit.HasLimit && s.Limit.Count == 1 {
-		// If the top level query explcitly includes "LIMIT 1"
 		return QueryResultTypeOneRow, nil
 	}
 
+	// Evaluate the effect of each join on cardinality. If there is a join that
+	// could select many rows even when filters from the parent select are
+	// considered then we know it's a many result and we can stop processing.
 	for _, join := range s.Joins {
 		joinCardinality, err := getTargetCardinality(join.Target, s, model, join.On)
 		if err != nil {
@@ -199,6 +389,8 @@ func getSelectCardinality(s Select, model Model) (queryResultType, error) {
 		}
 	}
 
+	// Haven't ruled out a single row result yet so check the root table that is
+	// being selected on.
 	cardinality, err := getTargetCardinality(s.From, s, model)
 	if err != nil {
 		return 0, err

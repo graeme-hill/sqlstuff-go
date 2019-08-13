@@ -148,6 +148,13 @@ type ColumnExpression struct {
 	TableName  string
 }
 
+func (c ColumnExpression) String() string {
+	if c.TableName == "" {
+		return c.ColumnName
+	}
+	return c.TableName + "." + c.ColumnName
+}
+
 type FunctionExpression struct {
 	FuncName   string
 	Parameters []Expression
