@@ -21,6 +21,7 @@ func TestBasicMigrations(t *testing.T) {
 	// users
 	require.Equal(t, "users", model.Tables["users"].Name)
 	require.Len(t, model.Tables["users"].Columns, 4)
+	require.Len(t, model.Tables["users"].Constraints, 1)
 
 	require.Equal(t, "id", model.Tables["users"].Columns[0].Name)
 	require.Equal(t, "email", model.Tables["users"].Columns[1].Name)
@@ -43,6 +44,7 @@ func TestBasicMigrations(t *testing.T) {
 	// groups
 	require.Equal(t, "groups", model.Tables["groups"].Name)
 	require.Len(t, model.Tables["groups"].Columns, 2)
+	require.Len(t, model.Tables["groups"].Constraints, 1)
 
 	require.Equal(t, "id", model.Tables["groups"].Columns[0].Name)
 	require.Equal(t, "name", model.Tables["groups"].Columns[1].Name)
@@ -57,6 +59,7 @@ func TestBasicMigrations(t *testing.T) {
 	// user groups
 	require.Equal(t, "user_groups", model.Tables["user_groups"].Name)
 	require.Len(t, model.Tables["user_groups"].Columns, 2)
+	require.Len(t, model.Tables["user_groups"].Constraints, 0)
 
 	require.Equal(t, "user_id", model.Tables["user_groups"].Columns[0].Name)
 	require.Equal(t, "group_id", model.Tables["user_groups"].Columns[1].Name)

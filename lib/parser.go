@@ -230,7 +230,7 @@ func (p *parser) scanAlterTable() (Statement, error) {
 
 		// ALTER TABLE ___ ADD COLUMN ...
 		if isKeyword(next, "COLUMN") {
-			def, _, err := p.scanColumnDef()
+			def, _, _, err := p.scanColumnDef()
 			if err != nil {
 				return AddColumn{}, err
 			}
@@ -277,7 +277,7 @@ func (p *parser) scanCreateTable() (CreateTable, error) {
 			break
 		}
 
-		// Skip PRIMARY KEY because we don't need that info
+		// Identify PRIMARY KEY shorthand in column definition
 		if p.checkWord("PRIMARY") {
 			more, err = p.skipColumnDef()
 			if err != nil {
@@ -299,11 +299,12 @@ func (p *parser) scanCreateTable() (CreateTable, error) {
 			}
 		}
 
-		col, more, err := p.scanColumnDef()
+		col, constraints, more, err := p.scanColumnDef()
 		if err != nil {
 			return CreateTable{}, err
 		}
 		createTable.Columns = append(createTable.Columns, col)
+		createTable.Constraints = append(createTable.Constraints, constraints...)
 
 		if !more {
 			break
@@ -339,37 +340,42 @@ func (p *parser) skipColumnDef() (more bool, err error) {
 }
 
 // Reads an expression like "first_name VARCHAR(200) NOT NULL"
-func (p *parser) scanColumnDef() (ColumnDefinition, bool, error) {
+func (p *parser) scanColumnDef() (ColumnDefinition, []CreateConstraint, bool, error) {
 	def := ColumnDefinition{}
+	constraints := []CreateConstraint{}
+
 	colNameTok, err := p.requireToken(tokenTypeWord)
 	if err != nil {
-		return ColumnDefinition{}, false, err
+		return ColumnDefinition{}, nil, false, err
 	}
 	def.Name = string(colNameTok.value)
 
 	typ, err := p.scanDataType()
 	if err != nil {
-		return ColumnDefinition{}, false, err
+		return ColumnDefinition{}, nil, false, err
 	}
 	def.Type = typ
 
 	err = p.applyTypeParams(&def)
 	if err != nil {
-		return ColumnDefinition{}, false, err
+		return ColumnDefinition{}, nil, false, err
 	}
 
-	err = p.applyConstraints(&def)
+	constraint, err := p.applyConstraints(&def)
 	if err != nil {
-		return ColumnDefinition{}, false, err
+		return ColumnDefinition{}, nil, false, err
+	}
+	if constraint != nil {
+		constraints = append(constraints, *constraint)
 	}
 
 	next, done, err := p.reader.Next()
 	if err != nil {
-		return ColumnDefinition{}, false, err
+		return ColumnDefinition{}, nil, false, err
 	}
 	more := !done && next.tokType == tokenTypeComma
 
-	return def, more, nil
+	return def, constraints, more, nil
 }
 
 func (p *parser) applyTypeParams(def *ColumnDefinition) error {
@@ -407,7 +413,7 @@ func (p *parser) applyTypeParams(def *ColumnDefinition) error {
 	return nil
 }
 
-func (p *parser) applyConstraints(def *ColumnDefinition) error {
+func (p *parser) applyConstraints(def *ColumnDefinition) (*CreateConstraint, error) {
 	// Defaults
 	def.Nullable = true
 
@@ -417,11 +423,13 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 
 	didAnything := false
 
+	var constraint *CreateConstraint = nil
+
 	for {
 		if p.checkWord("NULL") {
 			didAnything = true
 			if alreadyNullable {
-				return errors.New("Cannot specify null constraint more than once")
+				return nil, errors.New("Cannot specify null constraint more than once")
 			}
 			alreadyNullable = true
 			def.Nullable = true
@@ -431,12 +439,12 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 			didAnything = true
 			if p.checkWord("NULL") {
 				if alreadyNullable {
-					return errors.New("Cannot specify null constraint more than once")
+					return nil, errors.New("Cannot specify null constraint more than once")
 				}
 				alreadyNullable = true
 				def.Nullable = false
 			} else {
-				return errors.New("Expecting 'NOT' to be followed by 'NULL' but was not.")
+				return nil, errors.New("Expecting 'NOT' to be followed by 'NULL' but was not.")
 			}
 		}
 
@@ -444,10 +452,13 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 			didAnything = true
 			if p.checkWord("KEY") {
 				if alreadyPrimaryKey {
-					return errors.New("Cannot specify PRIMARY KEY more than once")
+					return nil, errors.New("Cannot specify PRIMARY KEY more than once")
 				}
 				alreadyPrimaryKey = true
-				// don't actually record this, just validate
+				constraint = &CreateConstraint{
+					Columns: []string{def.Name},
+					Type:    ConstraintTypePrimaryKey,
+				}
 			}
 		}
 
@@ -457,7 +468,7 @@ func (p *parser) applyConstraints(def *ColumnDefinition) error {
 		didAnything = false
 	}
 
-	return nil
+	return constraint, nil
 }
 
 func (p *parser) scanDataType() (dataType, error) {

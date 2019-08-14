@@ -19,8 +19,8 @@ const (
 )
 
 type TableUniqueConstraint struct {
-	TableName       string
-	UniqueContraint Constraint
+	TableName        string
+	UniqueConstraint Constraint
 }
 
 type Shape struct {
@@ -78,10 +78,125 @@ func getSelectShape(query Select, model Model) (Shape, error) {
 	}, nil
 }
 
-// Returns true iff the conditions cover the constraint.
 func conditionsCoverConstraint(constraint TableUniqueConstraint, conditions ...Condition) bool {
-	// TO DO
+	fixed := []string{}
+	for _, cond := range conditions {
+		fixed = union(fixed, conditionFixedColumns(constraint, cond))
+	}
+	
+	for _, col := range constraint.UniqueConstraint.Columns {
+		found := false
+		for _, fixedCol := range fixed {
+			if fixedCol == col
+		}
+	}
+}
+
+// insersect([["a","b"], ["a","c","b"]]) -> ["a","b"]
+func intersect(sets ...[]string) []string {
+	counts := map[string]int{}
+
+	for _, set := range sets {
+		for _, col := range set {
+			count, ok := counts[col]
+			if !ok {
+				count = 0
+			}
+			counts[col] = count + 1
+		}
+	}
+
+	result := []string{}
+	for col, count := range counts {
+		if count == len(sets) {
+			result = append(result, col)
+		}
+	}
+	return result
+}
+
+// union([["a","b"], ["a","c","b"]]) -> ["a","b","c"]
+func union(sets ...[]string) []string {
+	found := map[string]struct{}{}
+	for _, set := range sets {
+		for _, col := range set {
+			found[col] = struct{}{}
+		}
+	}
+
+	result := []string{}
+	for col := range found {
+		result = append(result, col)
+	}
+	return result
+}
+
+func conditionFixedColumns(constraint TableUniqueConstraint, condition Condition) []string {
+	// Break down multi-part logical conditions (eg: "a AND b" or "a OR b")
+	logical, ok := condition.(LogicalCondition)
+	if ok {
+		if logical.Op == LogicalOpAnd {
+			return union(
+				conditionFixedColumns(constraint, logical.Left),
+				conditionFixedColumns(constraint, logical.Right))
+		}
+		return intersect(
+			conditionFixedColumns(constraint, logical.Left),
+			conditionFixedColumns(constraint, logical.Right))
+	}
+
+	// Break down binary conditions (eg: 1+foo > 6)
+	binary, ok := condition.(BinaryCondition)
+	if ok {
+		if binary.Op == BinaryCondOpEqual {
+			l := binary.Left
+			r := binary.Right
+			return findFixedColumns(constraint, binary)
+		}
+		return []string{}
+	}
+
+	return []string{}
+}
+
+func findFixedColumns(constraint TableUniqueConstraint, cond BinaryCondition) []string {
+	if cond.Op != BinaryCondOpEqual {
+		return false
+	}
+
+	leftColumn, leftIsColumn := cond.Left.(ColumnExpression)
+	rightColumn, rightIsColumn := cond.Right.(ColumnExpression)
+
+	leftLiteral, leftIsLiteral := cond.Left.(Literal)
+	rightLiteral, rightIsLiteral := cond.Right.(Literal)
+
+	if leftIsColumn && rightIsLiteral {
+		return []string{leftColumn.String()}
+	} else if leftIsColumn && rightIsColumn {
+		return []string{leftColumn.String(), rightColumn.String()}
+	} else if leftIsLiteral && rightIsColumn {
+		return []string{rightColumn.String()}
+	}
+
+	return []string{}
+}
+
+func anyConditionCoversConstraint(constraint TableUniqueConstraint, conditions ...Condition) bool {
+	for _, cond := range conditions {
+		if conditionCoversConstraint(constraint, cond) {
+			return true
+		}
+	}
 	return false
+}
+
+func allConditionsCoverConstraint(constraint TableUniqueConstraint, conditions ...Condition) bool {
+	for _, cond := range conditions {
+		if !conditionCoversConstraint(constraint, cond) {
+			return false
+		}
+	}
+	return true
 }
 
 // Returns true iff the conditions cover any of the constraints.
@@ -111,8 +226,8 @@ func unique(m Model, tableName string, alias string, conditions ...Condition) (b
 	for _, constraint := range table.Constraints {
 		if constraint.IsUnique() {
 			uniqueConstraints = append(uniqueConstraints, TableUniqueConstraint{
-				TableName:       name,
-				UniqueContraint: constraint,
+				TableName:        name,
+				UniqueConstraint: constraint,
 			})
 		}
 	}
@@ -256,8 +371,8 @@ func getTableUniqueConstraints(constraints []Constraint, name string) []TableUni
 	for _, constraint := range constraints {
 		if constraint.IsUnique() {
 			uniqueConstraints = append(uniqueConstraints, TableUniqueConstraint{
-				TableName:       name,
-				UniqueContraint: constraint,
+				TableName:        name,
+				UniqueConstraint: constraint,
 			})
 		}
 	}
@@ -322,7 +437,7 @@ func getVirtualUniqueConstraints(s Select, m Model) ([]TableUniqueConstraint, er
 	// for _, c := range table.Constraints {
 	// 	res = append(res, TableUniqueConstraint{
 	// 		TableName: name,
-	// 		UniqueContraint: c,
+	// 		UniqueConstraint: c,
 	// 	})
 	// }
 

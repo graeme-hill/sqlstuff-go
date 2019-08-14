@@ -1,5 +1,12 @@
 package lib
 
+type constraintType int
+
+const (
+	ConstraintTypePrimaryKey constraintType = iota
+	ConstraintTypeUnique
+)
+
 type joinType int
 
 const (
@@ -118,6 +125,13 @@ func (s CreateTable) isStatement() {}
 func (s AddColumn) isStatement()   {}
 func (s DropColumn) isStatement()  {}
 func (s DropTable) isStatement()   {}
+
+type Literal interface {
+	isLiteral()
+}
+
+func (s StringLiteral) isLiteral() {}
+func (n NumberLiteral) isLiteral() {}
 
 type Expression interface {
 	isExpression()
@@ -243,8 +257,15 @@ type Select struct {
 }
 
 type CreateTable struct {
+	Name        string
+	Columns     []ColumnDefinition
+	Constraints []CreateConstraint
+}
+
+type CreateConstraint struct {
 	Name    string
-	Columns []ColumnDefinition
+	Type    constraintType
+	Columns []string
 }
 
 type ColumnDefinition struct {

@@ -2,13 +2,6 @@ package lib
 
 import "fmt"
 
-type constraintType int
-
-const (
-	ConstraintTypePrimaryKey constraintType = iota
-	ConstraintTypeUnique
-)
-
 type Model struct {
 	Tables map[string]*Table
 }
@@ -20,6 +13,7 @@ type Table struct {
 }
 
 type Constraint struct {
+	Name    string
 	Type    constraintType
 	Columns []string
 }
@@ -61,8 +55,17 @@ func (m *ModelBuilder) handleCreateTableStmt(ct CreateTable) error {
 	}
 
 	tbl := &Table{
-		Name:    ct.Name,
-		Columns: ct.Columns,
+		Name:        ct.Name,
+		Columns:     ct.Columns,
+		Constraints: []Constraint{},
+	}
+
+	for _, c := range ct.Constraints {
+		tbl.Constraints = append(tbl.Constraints, Constraint{
+			Name:    c.Name,
+			Type:    c.Type,
+			Columns: c.Columns,
+		})
 	}
 
 	m.model.Tables[tbl.Name] = tbl
